@@ -1,0 +1,252 @@
+/* RUBRIFACT API CLIENT — Panel Response y divisor */
+
+/* --- Response ------------------------------------------------------------ */
+
+.response-panel {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+.response-panel.collapsed .panel-toolbar {
+  border-bottom: none;
+}
+
+/* Maximizada: la respuesta ocupa todo el alto y se oculta la request. */
+.rubri-main.response-maximized .request-panel,
+.rubri-main.response-maximized .req-tabs,
+.rubri-main.response-maximized .split-handle {
+  display: none;
+}
+
+.rubri-main.response-maximized .response-panel {
+  flex: 1 1 auto;
+  height: auto;
+}
+
+/* Visor de respuesta propio (distinto al editor del body, misma paleta). */
+.response-view {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 0 18px;
+  background:
+    radial-gradient(120% 80% at 0% 0%, rgba(10, 143, 78, 0.14), transparent 55%),
+    #0b120f;
+  border-top: 1px solid rgba(197, 160, 89, 0.16);
+  font-family: var(--rubri-font-mono);
+  font-size: 13.5px;
+  line-height: 1.7;
+  scrollbar-width: thin;
+}
+
+.response-lines {
+  display: flex;
+  flex-direction: column;
+  min-width: 100%;
+}
+
+.response-line {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+}
+
+.response-line:hover {
+  background: rgba(197, 160, 89, 0.045);
+}
+
+.response-ln {
+  padding-right: 14px;
+  text-align: right;
+  color: #4d6b5c;
+  border-right: 1px solid rgba(197, 160, 89, 0.1);
+  user-select: none;
+}
+
+.response-code {
+  padding: 0 16px 0 14px;
+  color: #d7e3dc;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.response-token-key {
+  color: var(--rubri-gold);
+}
+
+.response-token-string {
+  color: #7fd8a6;
+}
+
+.response-token-number {
+  color: #e6c878;
+}
+
+.response-token-literal {
+  color: var(--rubri-success);
+  font-weight: 600;
+}
+
+.response-token-null {
+  color: #8a9a91;
+  font-style: italic;
+}
+
+.response-token-punct {
+  color: #6f8a7c;
+}
+
+.response-token-tag {
+  color: #6fd69b;
+}
+
+.response-token-attr {
+  color: var(--rubri-gold);
+}
+
+.response-token-comment {
+  color: var(--rubri-text-muted);
+  font-style: italic;
+}
+
+.response-token-plain {
+  color: #d7e3dc;
+}
+
+/* --- Divisor redimensionable request / response (estilo Postman) --------- */
+
+.split-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  height: 8px;
+  margin: -4px 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.split-grip {
+  width: 46px;
+  height: 3px;
+  border-radius: 3px;
+  background: #3a3a3a;
+  transition: var(--rubri-transition);
+}
+
+.split-handle:hover .split-grip,
+.split-handle.active .split-grip,
+.split-handle:focus-visible .split-grip {
+  background: var(--rubri-gold);
+  box-shadow: 0 0 8px rgba(197, 160, 89, 0.6);
+}
+
+.split-handle:focus-visible {
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px rgba(197, 160, 89, 0.3);
+}
+
+body.resizing-row {
+  cursor: row-resize;
+  user-select: none;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-shrink: 0;
+  height: 38px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--rubri-border-soft);
+}
+
+.response-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--rubri-text-primary);
+}
+
+.panel-header-right {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.status-badge {
+  padding: 2px 9px;
+  border-radius: 4px;
+  font-family: var(--rubri-font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.status-badge.success {
+  background: rgba(16, 185, 129, 0.14);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  color: var(--rubri-success);
+}
+
+.status-badge.error {
+  background: rgba(229, 62, 62, 0.14);
+  border: 1px solid rgba(229, 62, 62, 0.4);
+  color: var(--rubri-danger);
+}
+
+.duration {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--rubri-font-mono);
+  font-size: 0.7rem;
+  color: var(--rubri-text-secondary);
+}
+
+.success-icon {
+  color: var(--rubri-success);
+}
+
+.response-content {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  color: #d6d6d6;
+  font-family: var(--rubri-font-mono);
+  font-size: 0.82rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.response-empty {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--rubri-text-muted);
+  font-size: 0.8rem;
+}
+
+.response-empty svg {
+  color: var(--rubri-green-light);
+  opacity: 0.8;
+}
+
+.response-empty p {
+  margin: 0;
+}
+
+.response-empty span {
+  font-family: var(--rubri-font-mono);
+  font-size: 0.68rem;
+  color: #555;
+}
+

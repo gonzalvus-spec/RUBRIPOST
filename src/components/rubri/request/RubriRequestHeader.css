@@ -1,0 +1,85 @@
+/* RUBRIFACT API CLIENT — Cabecera de la request */
+
+/* --- Cabecera de la request (breadcrumb) --------------------------------- */
+
+.main-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+  padding: 2px 0 8px 0;
+}
+
+.crumb-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+/* El selector de colección vive en RubriCollectionMenu.css. */
+
+.crumb-sep {
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.request-title {
+  flex: 1;
+  max-width: 520px;
+  min-width: 140px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 0.98rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  outline: none;
+  transition: all 0.16s ease;
+}
+
+.request-title::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+  font-weight: 500;
+  font-style: italic;
+}
+
+.request-title:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.request-title:focus {
+  background: var(--rubri-bg-input);
+  border-color: var(--rubri-green-light);
+  box-shadow: 0 0 0 3px rgba(10, 143, 78, 0.22), inset 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.badge-unsaved,
+.badge-dirty {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-unsaved {
+  background: rgba(229, 62, 62, 0.14);
+  border: 1px solid rgba(229, 62, 62, 0.4);
+  color: var(--rubri-danger);
+}
+
+.badge-dirty {
+  background: rgba(197, 160, 89, 0.13);
+  border: 1px solid rgba(197, 160, 89, 0.4);
+  color: var(--rubri-gold);
+}

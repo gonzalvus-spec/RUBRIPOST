@@ -1,0 +1,44 @@
+/* RUBRIFACT API CLIENT — Panel Query Params */
+
+/* --- Query params -------------------------------------------------------- */
+
+.query-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  padding: 14px 16px;
+  overflow-y: auto;
+}
+
+.query-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.query-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 9px;
+}
+
+.query-row.query-head {
+  padding: 0 2px 6px;
+  border-bottom: 1px solid var(--rubri-border-soft);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rubri-text-muted);
+}
+
+.query-row .input {
+  min-width: 0;
+}
+
+.add-query {
+  align-self: flex-start;
+}

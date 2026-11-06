@@ -1,0 +1,121 @@
+/* RUBRIFACT API CLIENT — Barra de URL y acciones */
+
+/* --- Barra de URL -------------------------------------------------------- */
+
+.request-bar {
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+  height: 44px;
+  background: var(--rubri-bg-input);
+  border: 1px solid var(--rubri-border);
+  border-radius: var(--rubri-radius);
+  overflow: hidden;
+  transition: var(--rubri-transition);
+}
+
+.request-bar:focus-within {
+  border-color: var(--rubri-green-light);
+  box-shadow: var(--rubri-glow);
+}
+
+.method-select {
+  flex-shrink: 0;
+  padding: 0 12px;
+  background: rgba(0, 0, 0, 0.22);
+  border: none;
+  border-right: 1px solid var(--rubri-border);
+  outline: none;
+  font-family: var(--rubri-font-mono);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  appearance: none;
+}
+
+.method-select option {
+  background: var(--rubri-bg-panel);
+  color: var(--rubri-text-primary);
+  font-weight: 600;
+}
+
+.url-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0 14px;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--rubri-text-primary);
+  font-family: var(--rubri-font-mono);
+  font-size: 0.9rem;
+}
+
+.url-input::placeholder {
+  color: var(--rubri-text-muted);
+}
+
+.btn-save-bar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex-shrink: 0;
+  padding: 0 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border: none;
+  border-left: 1px solid var(--rubri-border);
+  color: var(--rubri-text-secondary);
+  font-family: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--rubri-transition);
+}
+
+.btn-save-bar:hover:not(:disabled) {
+  background: rgba(10, 143, 78, 0.16);
+  color: var(--rubri-text-primary);
+}
+
+.btn-save-bar:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-send {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 100%;
+  padding: 0 22px;
+  background: var(--rubri-gradient);
+  border: none;
+  border-left: 1px solid rgba(0, 0, 0, 0.25);
+  border-radius: 0;
+  color: var(--rubri-text-primary);
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--rubri-transition);
+}
+
+.btn-send:hover:not(:disabled) {
+  background: var(--rubri-gradient-hover);
+}
+
+.btn-send:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* El botón Enviar ocupa toda la altura de la barra (hereda de .btn). */
+.request-bar .btn-send {
+  height: 100%;
+  border-radius: 0;
+}
+

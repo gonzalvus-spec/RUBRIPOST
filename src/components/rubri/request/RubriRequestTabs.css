@@ -1,0 +1,62 @@
+/* RUBRIFACT API CLIENT — Pestañas Body / Auth / Headers */
+
+/* --- Tabs de la request -------------------------------------------------- */
+
+.req-tabs {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--rubri-border);
+}
+
+.req-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 13px 10px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--rubri-text-secondary);
+  font-family: inherit;
+  font-size: 0.86rem;
+  cursor: pointer;
+  transition: var(--rubri-transition);
+}
+
+.req-tab:hover {
+  color: var(--rubri-text-primary);
+  background: var(--rubri-bg-hover);
+}
+
+.req-tab.active {
+  color: var(--rubri-text-primary);
+  border-bottom-color: var(--rubri-gold);
+  font-weight: 600;
+}
+
+.tab-count {
+  min-width: 17px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: rgba(197, 160, 89, 0.16);
+  color: var(--rubri-gold);
+  font-family: var(--rubri-font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.tab-error {
+  min-width: 17px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: rgba(229, 62, 62, 0.18);
+  color: var(--rubri-danger);
+  font-family: var(--rubri-font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-align: center;
+}
+

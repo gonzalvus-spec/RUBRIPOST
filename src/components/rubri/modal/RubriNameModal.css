@@ -1,0 +1,91 @@
+/* RUBRIFACT API CLIENT — Modal de nombre / colección */
+
+/* =========================================================================
+   Modal
+   ========================================================================= */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(3px);
+}
+
+.modal {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  width: 100%;
+  max-width: 430px;
+  padding: 20px;
+  background: var(--rubri-bg-panel);
+  border: 1px solid var(--rubri-border);
+  border-top: 2px solid var(--rubri-gold);
+  border-radius: var(--rubri-radius-lg);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.modal-label {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--rubri-text-secondary);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.color-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.color-swatch {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: var(--rubri-transition);
+}
+
+.color-swatch:hover {
+  transform: translateY(-1px) scale(1.06);
+}
+
+.color-swatch.selected {
+  border-color: var(--rubri-text-primary);
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.16);
+}
+

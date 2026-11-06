@@ -1,0 +1,101 @@
+/* RUBRIFACT API CLIENT — Panel Auth */
+
+/* --- Auth ---------------------------------------------------------------- */
+
+.auth-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  max-width: 600px;
+}
+
+.form-row label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--rubri-text-secondary);
+}
+
+.input {
+  height: 36px;
+  padding: 0 11px;
+  background: var(--rubri-bg-input);
+  border: 1px solid var(--rubri-border);
+  border-radius: 6px;
+  color: var(--rubri-text-primary);
+  font-family: inherit;
+  font-size: 0.86rem;
+  outline: none;
+  transition: var(--rubri-transition);
+}
+
+.input:focus {
+  border-color: var(--rubri-green-light);
+  box-shadow: var(--rubri-glow);
+}
+
+.input.mono {
+  font-family: var(--rubri-font-mono);
+  font-size: 0.84rem;
+}
+
+select.input {
+  cursor: pointer;
+}
+
+select.input option {
+  background: var(--rubri-bg-panel);
+  color: var(--rubri-text-primary);
+}
+
+.input-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.input-group .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  max-width: 660px;
+  padding: 10px 12px;
+  background: rgba(10, 143, 78, 0.08);
+  border: 1px solid rgba(10, 143, 78, 0.22);
+  border-radius: var(--rubri-radius);
+  color: var(--rubri-text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.hint svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--rubri-green-light);
+}
+
+.hint code {
+  padding: 1px 5px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 3px;
+  color: var(--rubri-gold);
+  font-family: var(--rubri-font-mono);
+  font-size: 0.76rem;
+}
+

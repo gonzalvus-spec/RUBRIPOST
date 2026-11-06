@@ -1,0 +1,38 @@
+/* RUBRIFACT API CLIENT — Layout de la vista RubriApiView */
+
+/* =========================================================================
+   Layout general
+   ========================================================================= */
+
+.rubri-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+
+/* =========================================================================
+   Área principal
+   ========================================================================= */
+
+.rubri-main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px 14px 10px;
+  overflow: hidden;
+}
+
+/* Indicador compartido: cambios sin guardar (topbar, sidebar y cabecera). */
+.dirty-dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--rubri-gold);
+  box-shadow: 0 0 6px rgba(197, 160, 89, 0.8);
+}

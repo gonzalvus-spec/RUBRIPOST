@@ -1,0 +1,28 @@
+/* RUBRIFACT API CLIENT — Panel Body (editor Monaco) */
+
+.editor-shell {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  background: var(--rubri-bg-panel);
+}
+
+.editor-shell.has-errors {
+  box-shadow: inset 0 0 0 1px rgba(229, 62, 62, 0.4);
+}
+
+.monaco-editor .editorPlaceholder {
+  font-style: italic;
+  letter-spacing: 0.02em;
+}
+
+.editor-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  color: var(--rubri-text-secondary);
+  font-size: 0.8rem;
+}
+

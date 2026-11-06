@@ -1,0 +1,100 @@
+/* RUBRIFACT API CLIENT — Estructura de paneles */
+
+/* =========================================================================
+   Paneles (body / auth / headers / response)
+   ========================================================================= */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: var(--rubri-bg-panel);
+  border: 1px solid var(--rubri-border);
+  border-radius: var(--rubri-radius);
+  overflow: hidden;
+}
+
+.panel-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-shrink: 0;
+  height: 38px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--rubri-border-soft);
+}
+
+.body-types {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.body-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.8rem;
+  color: var(--rubri-text-secondary);
+}
+
+.body-type.active {
+  color: var(--rubri-text-primary);
+  font-weight: 600;
+}
+
+.body-type-dot {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--rubri-green-light);
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(10, 143, 78, 0.6);
+}
+
+.body-type-chip {
+  padding: 2px 9px;
+  background: rgba(197, 160, 89, 0.12);
+  border: 1px solid rgba(197, 160, 89, 0.35);
+  border-radius: 4px;
+  color: var(--rubri-gold);
+  font-family: var(--rubri-font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.panel-caption {
+  font-size: 0.82rem;
+  color: var(--rubri-text-secondary);
+}
+
+.panel-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.json-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.json-status.ok {
+  color: var(--rubri-success);
+}
+
+.json-status.error {
+  color: var(--rubri-danger);
+}
+
+.content-type {
+  font-family: var(--rubri-font-mono);
+  font-size: 0.7rem;
+  color: var(--rubri-text-muted);
+}
+

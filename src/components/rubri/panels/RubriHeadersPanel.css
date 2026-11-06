@@ -1,0 +1,48 @@
+/* RUBRIFACT API CLIENT — Panel Headers */
+
+/* --- Headers ------------------------------------------------------------- */
+
+.headers-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  padding: 14px 16px;
+  overflow-y: auto;
+}
+
+.headers-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.headers-row {
+  display: grid;
+  grid-template-columns: 22px 1fr 1fr 28px;
+  align-items: center;
+  gap: 9px;
+}
+
+.headers-row.header-row {
+  padding: 0 2px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rubri-text-muted);
+}
+
+.header-check {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--rubri-green-light);
+  cursor: pointer;
+}
+
+.add-header {
+  align-self: flex-start;
+}
+

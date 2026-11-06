@@ -1,0 +1,214 @@
+/* RUBRIFACT API CLIENT — Selector de colección (menú propio) */
+
+.collection-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.crumb-collection {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 260px;
+  padding: 5px 9px 5px 9px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  color: var(--rubri-text-primary);
+  font-family: inherit;
+  font-size: 0.83rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.crumb-collection:hover,
+.crumb-collection.open {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(197, 160, 89, 0.45);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.28);
+}
+
+.crumb-collection-name {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crumb-folder-icon {
+  flex-shrink: 0;
+  transition: transform 0.16s ease;
+}
+
+.crumb-collection:hover .crumb-folder-icon {
+  transform: scale(1.08);
+}
+
+.crumb-select-arrow {
+  flex-shrink: 0;
+  color: var(--rubri-text-muted);
+  transition: transform 0.16s ease, color 0.16s ease;
+}
+
+.crumb-collection:hover .crumb-select-arrow,
+.crumb-collection.open .crumb-select-arrow {
+  color: var(--rubri-gold);
+}
+
+.crumb-collection.open .crumb-select-arrow {
+  transform: rotate(180deg);
+}
+
+/* --- Desplegable --------------------------------------------------------- */
+
+.collection-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  min-width: 248px;
+  max-width: 320px;
+  max-height: 340px;
+  padding: 6px;
+  background: var(--rubri-bg-panel);
+  border: 1px solid var(--rubri-border);
+  border-radius: 10px;
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(197, 160, 89, 0.08) inset;
+  animation: collection-pop-in 0.12s ease-out;
+}
+
+@keyframes collection-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.collection-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  padding: 5px 8px;
+  background: var(--rubri-bg-input);
+  border: 1px solid var(--rubri-border-soft);
+  border-radius: 7px;
+  color: var(--rubri-text-muted);
+}
+
+.collection-search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--rubri-text-primary);
+  font-family: inherit;
+  font-size: 0.76rem;
+}
+
+.collection-list {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.collection-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 8px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--rubri-text-primary);
+  font-family: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.collection-option.highlighted {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.collection-option.active {
+  background: rgba(10, 143, 78, 0.16);
+  color: #ffffff;
+}
+
+.collection-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.collection-option-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.collection-count {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--rubri-text-muted);
+  font-size: 0.66rem;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.collection-check {
+  flex-shrink: 0;
+  color: var(--rubri-green-light);
+}
+
+.collection-empty {
+  margin: 0;
+  padding: 10px 8px;
+  color: var(--rubri-text-muted);
+  font-size: 0.74rem;
+}
+
+.collection-new {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 7px 8px;
+  border: none;
+  border-top: 1px solid var(--rubri-border-soft);
+  border-radius: 0 0 7px 7px;
+  background: transparent;
+  color: var(--rubri-gold);
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.collection-new:hover {
+  background: rgba(197, 160, 89, 0.12);
+}
