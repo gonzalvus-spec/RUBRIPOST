@@ -26,9 +26,21 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg5NjIxRDE0M0E2RkY5ODAKUldTQStXODZGQjFpaWV0UGNydFg2emtqYk9ZWWFTSTVHVE42SWpPNzFvTk9WNGNwc2FPUjVtVDEK",
+      "endpoints": [
+        "https://github.com/gonzalvus-spec/RUBRIPOST/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

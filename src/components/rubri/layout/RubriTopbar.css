@@ -364,6 +364,30 @@
   height: 30px;
 }
 
+.topbar-update.available,
+.topbar-update.progress {
+  width: auto;
+  gap: 6px;
+  padding: 0 10px;
+  border-color: rgba(16, 185, 129, 0.55);
+  background: var(--rubri-gradient);
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.topbar-update.available:hover {
+  border-color: var(--rubri-green-light);
+  background: var(--rubri-gradient-hover);
+  box-shadow: var(--rubri-glow);
+}
+
+.topbar-update.progress:disabled {
+  opacity: 1;
+  cursor: wait;
+}
+
 
 /* --- Usuario autenticado ------------------------------------------------ */
 

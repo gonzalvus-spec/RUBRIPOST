@@ -4,6 +4,7 @@ import {
   ChevronDown,
   Clock,
   Cookie,
+  Download,
   LoaderCircle,
   LogOut,
   LayoutDashboard,
@@ -21,12 +22,15 @@ import {
   type HttpMethod,
 } from '../../../store/apiStore';
 import type { SesionUsuario } from '../../../store/authStore';
+import type { AppUpdater } from '../../../hooks/useAppUpdater';
+import { confirmAction, notify } from '../../../lib/alerts';
 import { methodClass } from '../constants';
 import { RubriProyectoSwitcher } from './RubriProyectoSwitcher';
 import { RubrifactLogo } from './RubrifactLogo';
 import './RubriTopbar.css';
 
 interface RubriTopbarProps {
+  updater: AppUpdater;
   sidebarCollapsed: boolean;
   openTabs: ApiRequestDocument[];
   lastSavedId: string | null;
@@ -55,6 +59,7 @@ interface RubriTopbarProps {
 }
 
 export const RubriTopbar = ({
+  updater,
   sidebarCollapsed,
   openTabs,
   lastSavedId,
@@ -83,6 +88,38 @@ export const RubriTopbar = ({
 }: RubriTopbarProps) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
+
+  const handleUpdateClick = async () => {
+    if (updater.status === 'available') {
+      const version = updater.version?.startsWith('v')
+        ? updater.version
+        : `v${updater.version}`;
+      const confirmed = await confirmAction({
+        title: `Actualizar a ${version}`,
+        text: updater.notes
+          ? `${updater.notes}\n\nLa aplicación se reiniciará al finalizar.`
+          : 'La aplicación se reiniciará al finalizar.',
+        confirmText: 'Actualizar ahora',
+        cancelText: 'Más tarde',
+      });
+      if (confirmed) await updater.downloadAndInstall();
+      return;
+    }
+
+    const result = await updater.checkForUpdates();
+    if (result === 'current') {
+      notify.success('RubriPost está actualizado', 'Ya tienes la última versión.');
+    } else if (result === 'error') {
+      notify.error('No se pudo buscar actualizaciones', 'Revisa tu conexión e inténtalo de nuevo.');
+    } else if (result === 'unavailable') {
+      notify.info('Actualizaciones solo en la app de escritorio');
+    }
+  };
+
+  const updateBusy = ['checking', 'downloading', 'installing'].includes(updater.status);
+  const updateVersion = updater.version?.startsWith('v')
+    ? updater.version
+    : `v${updater.version}`;
 
   // Menú de todas las pestañas: se cierra al hacer clic fuera o con Escape.
   useEffect(() => {
@@ -329,6 +366,24 @@ export const RubriTopbar = ({
           title="Cookies del proyecto"
         >
           <Cookie size={15} />
+        </button>
+
+        <button
+          type="button"
+          className={clsx('icon-btn', 'topbar-update', {
+            available: updater.status === 'available',
+            progress: updater.status === 'downloading' || updater.status === 'installing',
+          })}
+          onClick={() => void handleUpdateClick()}
+          disabled={updateBusy}
+          aria-label="Buscar actualizaciones"
+          title={updater.error ?? 'Buscar actualizaciones'}
+          aria-busy={updateBusy}
+        >
+          {updateBusy ? <LoaderCircle size={15} className="spin" /> : <Download size={15} />}
+          {updater.status === 'available' && <span>Actualizar a {updateVersion}</span>}
+          {updater.status === 'downloading' && <span>Descargando {updater.progress}%...</span>}
+          {updater.status === 'installing' && <span>Instalando...</span>}
         </button>
 
         <button

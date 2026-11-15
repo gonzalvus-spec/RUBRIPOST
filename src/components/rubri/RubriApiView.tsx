@@ -5,6 +5,7 @@ import '../../App.css';
 import './RubriApiView.css';
 
 import { alertError, confirmAction, notify } from '../../lib/alerts';
+import { useAppUpdater } from '../../hooks/useAppUpdater';
 import {
   MAX_BODY_BYTES,
   collectionSubtreeIds,
@@ -55,6 +56,8 @@ const RubriBodyPanel = lazy(() => import('./panels/RubriBodyPanel').then((module
  * compone los módulos de la interfaz (topbar, sidebar, paneles, modal).
  */
 export const RubriApiView = () => {
+  const updater = useAppUpdater();
+
   // Draft + persistencia (Zustand)
   const eid = useApiStore((state) => state.eid);
   const nombre = useApiStore((state) => state.nombre);
@@ -772,6 +775,7 @@ export const RubriApiView = () => {
   return (
     <div className="rubri-app">
       <RubriTopbar
+        updater={updater}
         sesion={sesion}
         proyectos={proyectos}
         proyectoActivo={eid}

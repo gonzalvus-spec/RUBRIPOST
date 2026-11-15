@@ -431,3 +431,24 @@ Las peticiones se ejecutan en Rust con `reqwest`, por lo que **no** aplican las
 restricciones CORS del webview: cualquier API responde igual que desde `curl`.
 En el navegador (solo desarrollo web) se usa `fetch` como respaldo, con las
 limitaciones normales de CORS y sin cookies reales.
+
+## Actualizaciones automáticas (estilo Discord)
+
+La app puede actualizarse sola desde GitHub Releases:
+
+- En la barra superior hay un botón de descarga **Buscar actualizaciones**.
+- Al arrancar, la app también comprueba en silencio si hay una versión nueva.
+- Si la hay, se muestra un diálogo: al confirmar, se descarga el instalador firmado, se instala y la app se reinicia.
+
+### Publicar una versión
+
+1. Sube la versión en `package.json`, `src-tauri/Cargo.toml` y `src-tauri/tauri.conf.json`.
+2. Haz commit y crea el tag (`git tag v0.2.0` y `git push origin v0.2.0`).
+3. El workflow Release (`.github/workflows/release.yml`) compila, firma y publica el release en GitHub con `latest.json` incluido.
+
+### Requisitos en GitHub
+
+- Secret `TAURI_SIGNING_PRIVATE_KEY`: contenido completo de `%USERPROFILE%\.tauri\rubripost.key` (la clave nunca se sube al repo).
+- Secret `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: contraseña elegida al generar la clave.
+- La clave pública ya está en `tauri.conf.json`; la privada firma cada release.
+- Las instalaciones anteriores a este cambio no incluyen el updater: deberán instalarse una vez manualmente.
