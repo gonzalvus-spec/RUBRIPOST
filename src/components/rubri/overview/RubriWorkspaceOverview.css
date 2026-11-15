@@ -1,0 +1,381 @@
+/* RUBRIFACT API CLIENT — Overview del workspace */
+
+.workspace-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 4px 18px;
+}
+
+/* Scrollbars neutras del Overview: nada de verde brillante sobre el tema oscuro. */
+.workspace-overview,
+.workspace-overview * {
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a2e transparent;
+}
+
+.workspace-overview::-webkit-scrollbar,
+.workspace-overview *::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.workspace-overview::-webkit-scrollbar-track,
+.workspace-overview *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.workspace-overview::-webkit-scrollbar-thumb,
+.workspace-overview *::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background: #2a2a2e;
+  background-clip: content-box;
+}
+
+.workspace-overview::-webkit-scrollbar-thumb:hover,
+.workspace-overview *::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+  background-clip: content-box;
+}
+
+.workspace-overview::-webkit-scrollbar-corner,
+.workspace-overview *::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* --- Cabecera ------------------------------------------------------------ */
+
+.overview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.overview-heading {
+  min-width: 0;
+}
+
+.overview-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  color: var(--rubri-gold);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.overview-heading h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 1.2;
+  color: var(--rubri-text-primary);
+}
+
+.overview-heading p {
+  margin: 7px 0 0;
+  max-width: 640px;
+  color: var(--rubri-text-secondary);
+  font-size: 0.83rem;
+  line-height: 1.55;
+}
+
+.overview-heading code {
+  padding: 1px 6px;
+  border: 1px solid var(--rubri-border);
+  border-radius: 4px;
+  background: var(--rubri-bg-input);
+  color: var(--rubri-gold);
+  font-family: var(--rubri-font-mono);
+  font-size: 0.76rem;
+}
+
+.overview-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* --- Contadores ---------------------------------------------------------- */
+
+.overview-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.overview-stat {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 14px;
+  border: 1px solid var(--rubri-border);
+  border-radius: var(--rubri-radius-lg);
+  background: linear-gradient(160deg, rgba(30, 36, 32, 0.9), rgba(22, 24, 23, 0.95));
+}
+
+.overview-stat-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.overview-stat-icon.collections { color: var(--rubri-gold); }
+.overview-stat-icon.requests { color: #6ee7b7; }
+.overview-stat-icon.environments { color: #7aa7ff; }
+
+.overview-stat div {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.overview-stat strong {
+  color: var(--rubri-text-primary);
+  font-size: 1.35rem;
+  line-height: 1.1;
+}
+
+.overview-stat span {
+  color: var(--rubri-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.overview-stat small {
+  margin-top: 3px;
+  color: var(--rubri-text-muted);
+  font-size: 0.69rem;
+}
+
+/* --- Tarjetas principales ------------------------------------------------ */
+
+.overview-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--rubri-border);
+  border-radius: var(--rubri-radius-lg);
+  background: var(--rubri-bg-panel);
+}
+
+.overview-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.overview-card-head h2 {
+  margin: 0;
+  color: var(--rubri-text-primary);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.overview-card-head p {
+  margin: 3px 0 0;
+  color: var(--rubri-text-muted);
+  font-size: 0.73rem;
+}
+
+/* --- Quick actions ------------------------------------------------------- */
+
+.overview-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.overview-quick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--rubri-border-soft);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--rubri-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: var(--rubri-transition);
+}
+
+.overview-quick:hover,
+.overview-quick:focus-visible {
+  outline: none;
+  border-color: rgba(197, 160, 89, 0.55);
+  background: var(--rubri-bg-hover);
+  transform: translateY(-1px);
+}
+
+.overview-quick-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: rgba(10, 143, 78, 0.16);
+  color: var(--rubri-green-light);
+}
+
+.overview-quick span:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.overview-quick strong {
+  font-size: 0.79rem;
+}
+
+.overview-quick small {
+  overflow: hidden;
+  color: var(--rubri-text-muted);
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Lista de colecciones ------------------------------------------------ */
+
+.overview-collection-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 340px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+}
+
+.overview-collection {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 40px;
+  padding: 6px 10px 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--rubri-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: var(--rubri-transition);
+}
+
+.overview-collection:hover,
+.overview-collection:focus-visible {
+  outline: none;
+  border-color: var(--rubri-border-soft);
+  background: var(--rubri-bg-hover);
+}
+
+.overview-collection-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.overview-collection-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.overview-collection-name {
+  overflow: hidden;
+  font-size: 0.81rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-collection-meta {
+  overflow: hidden;
+  color: var(--rubri-text-muted);
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-collection-open {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  color: var(--rubri-text-muted);
+  font-size: 0.68rem;
+  opacity: 0;
+  transition: var(--rubri-transition);
+}
+
+.overview-collection:hover .overview-collection-open,
+.overview-collection:focus-visible .overview-collection-open {
+  color: var(--rubri-gold);
+  opacity: 1;
+}
+
+.overview-collections-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  padding: 22px 12px;
+  border: 1px dashed var(--rubri-border);
+  border-radius: var(--rubri-radius);
+  color: var(--rubri-text-muted);
+  text-align: center;
+}
+
+.overview-collections-empty svg {
+  color: var(--rubri-green-light);
+}
+
+.overview-collections-empty p {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+/* --- Adaptación a pantallas estrechas ----------------------------------- */
+
+@media (max-width: 1080px) {
+  .overview-collection-list {
+    max-height: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .overview-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .overview-quick-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

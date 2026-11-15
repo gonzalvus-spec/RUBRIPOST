@@ -111,8 +111,8 @@ export const guardarCookie = async (entrada: {
   dominio?: string | null;
 }): Promise<CookieRegistro> => invoke<CookieRegistro>('guardar_cookie', { payload: entrada });
 
-export const eliminarCookie = async (id: string): Promise<void> =>
-  invoke('eliminar_cookie', { payload: { id } });
+export const eliminarCookie = async (id: string, eid: string): Promise<void> =>
+  invoke('eliminar_cookie', { payload: { id, eid } });
 
 /**
  * Vacía el tarro de cookies del proyecto; con `dominio` borra solo las de ese

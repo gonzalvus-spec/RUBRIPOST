@@ -1,20 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Clock, LoaderCircle, RefreshCw, Search, UserPlus, X } from 'lucide-react';
+import { Activity, ChevronDown, Clock, Folder, Globe, LoaderCircle, LogIn, Pencil, Plus, RefreshCw, Search, Trash2, Users, UserPlus, X } from 'lucide-react';
 
 import { useAuthStore } from '../../store/authStore';
+import { useApiStore } from '../../store/apiStore';
+import { registrarCambio } from '../../lib/audit';
+import { filterHistory, historyTime, historyTone, type HistorialEntrada } from '../../lib/history';
 import './HistorialModal.css';
 
 /** Entrada de la bitácora devuelta por el backend. */
-interface HistorialEntrada {
-  usuario: string;
-  accion: string;
-  entidad: string;
-  entidad_id?: string | null;
-  nombre?: string | null;
-  detalle?: string | null;
-  fecha: string;
-}
 
 interface HistorialModalProps {
   onClose: () => void;
@@ -31,6 +25,7 @@ const formatearFecha = (fecha: string): string => {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
+    hour12: true,
   });
 };
 
@@ -48,11 +43,15 @@ const iconoEntidad: Record<string, string> = {
  */
 export const HistorialModal = ({ onClose }: HistorialModalProps) => {
   const sesion = useAuthStore((state) => state.sesion);
+  const eid = useApiStore((state) => state.eid);
 
   const [entradas, setEntradas] = useState<HistorialEntrada[]>([]);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filtro, setFiltro] = useState('');
+  const [usuario, setUsuario] = useState('');
+  const [entidad, setEntidad] = useState('');
+  const [dias, setDias] = useState(0);
 
   const [mostrarAlta, setMostrarAlta] = useState(false);
   const [nuevoUsuario, setNuevoUsuario] = useState('');
@@ -62,12 +61,12 @@ export const HistorialModal = ({ onClose }: HistorialModalProps) => {
 
   const esAdmin = sesion?.rol === 'admin';
 
-  const cargar = useCallback(async (usuarioFiltro: string) => {
+  const cargar = useCallback(async () => {
     setCargando(true);
     setError(null);
     try {
       const datos = await invoke<HistorialEntrada[]>('listar_historial', {
-        filtro: { usuario: usuarioFiltro.trim() || null, limit: 300 },
+        filtro: { eid, usuario: null, limit: 300 },
       });
       setEntradas(datos);
     } catch (problema) {
@@ -75,10 +74,10 @@ export const HistorialModal = ({ onClose }: HistorialModalProps) => {
     } finally {
       setCargando(false);
     }
-  }, []);
+  }, [eid]);
 
   useEffect(() => {
-    void cargar('');
+    void cargar();
   }, [cargar]);
 
   useEffect(() => {
@@ -97,6 +96,21 @@ export const HistorialModal = ({ onClose }: HistorialModalProps) => {
     return [...conteo.entries()].sort((a, b) => b[1] - a[1]);
   }, [entradas]);
 
+  const visibles = useMemo(() => filterHistory(entradas, {
+    search: filtro, user: usuario, entity: entidad, days: dias,
+  }), [entradas, filtro, usuario, entidad, dias]);
+  const diasAgrupados = useMemo(() => {
+    const grupos = new Map<string, HistorialEntrada[]>();
+    for (const entrada of visibles) {
+      const fecha = new Date(entrada.fecha);
+      const dia = Number.isNaN(fecha.getTime()) ? 'Sin fecha' : fecha.toLocaleDateString('es-PE', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+      });
+      grupos.set(dia, [...(grupos.get(dia) ?? []), entrada]);
+    }
+    return [...grupos.entries()];
+  }, [visibles]);
+
   const crearUsuario = async (event: React.FormEvent) => {
     event.preventDefault();
     setMensajeAlta(null);
@@ -114,11 +128,12 @@ export const HistorialModal = ({ onClose }: HistorialModalProps) => {
         },
       });
       setMensajeAlta(`Usuario "${nuevoUsuario.trim().toLowerCase()}" creado`);
+      registrarCambio({ eid, accion: 'Creó usuario', entidad: 'usuario', nombre: nuevoUsuario.trim().toLowerCase() });
       setNuevoUsuario('');
       setNuevoNombre('');
       setNuevaClave('');
       setMostrarAlta(false);
-      await cargar(filtro);
+      await cargar();
     } catch (problema) {
       setMensajeAlta(typeof problema === 'string' ? problema : String(problema));
     }
@@ -132,7 +147,7 @@ export const HistorialModal = ({ onClose }: HistorialModalProps) => {
             <Clock size={16} />
             <div>
               <h2>Historial de cambios</h2>
-              <p>Todo lo que cada usuario guardó, editó o eliminó, con fecha y hora. Se conserva 30 días.</p>
+              <p>Proyecto <b>{eid}</b> · Historial exclusivo de este proyecto · 30 días</p>
             </div>
           </div>
           <div className="historial-head-actions">
@@ -201,6 +216,12 @@ export const HistorialModal = ({ onClose }: HistorialModalProps) => {
           <p className={error ? 'historial-error' : 'historial-ok'}>{error ?? mensajeAlta}</p>
         )}
 
+        <div className="historial-stats">
+          <div><Activity size={18} /><span><b>{entradas.length}</b><small>Cambios cargados</small></span></div>
+          <div><Users size={18} /><span><b>{totalPorUsuario.length}</b><small>Usuarios con actividad</small></span></div>
+          <div><Clock size={18} /><span><b>{visibles.length}</b><small>Coinciden con los filtros</small></span></div>
+        </div>
+
         <div className="historial-toolbar">
           <label className="historial-search">
             <Search size={13} />
@@ -208,55 +229,72 @@ export const HistorialModal = ({ onClose }: HistorialModalProps) => {
               type="search"
               value={filtro}
               onChange={(event) => setFiltro(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') void cargar(filtro);
-              }}
-              placeholder="Filtrar por usuario..."
+              aria-label="Buscar en el historial"
+              placeholder="Buscar acción, nombre, usuario…"
             />
           </label>
+          <select aria-label="Filtrar por usuario" value={usuario} onChange={(event) => setUsuario(event.target.value)}>
+            <option value="">Todos los usuarios</option>
+            {totalPorUsuario.map(([nombre]) => <option key={nombre} value={nombre}>{nombre}</option>)}
+          </select>
+          <select aria-label="Filtrar por tipo de elemento" value={entidad} onChange={(event) => setEntidad(event.target.value)}>
+            <option value="">Todos los elementos</option>
+            {Object.entries(iconoEntidad).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+          <select aria-label="Filtrar por período" value={dias} onChange={(event) => setDias(Number(event.target.value))}>
+            <option value={0}>Todo el período</option><option value={1}>Últimas 24 horas</option><option value={7}>Últimos 7 días</option><option value={30}>Últimos 30 días</option>
+          </select>
           <button
             type="button"
             className="historial-btn"
-            onClick={() => void cargar(filtro)}
+            onClick={() => void cargar()}
             disabled={cargando}
           >
             {cargando ? <LoaderCircle size={13} className="spin" /> : <RefreshCw size={13} />}
             Actualizar
           </button>
-          {totalPorUsuario.length > 0 && (
-            <span className="historial-resumen">
-              {entradas.length} cambios ·{' '}
-              {totalPorUsuario.map(([usuario, total]) => `${usuario} (${total})`).join(' · ')}
-            </span>
-          )}
+          {(filtro || usuario || entidad || dias > 0) && <button type="button" className="historial-btn" onClick={() => { setFiltro(''); setUsuario(''); setEntidad(''); setDias(0); }}>Limpiar filtros</button>}
         </div>
 
-        <div className="historial-lista">
+        <div className="historial-lista" aria-busy={cargando}>
           {cargando && entradas.length === 0 && (
             <p className="historial-vacio">Cargando historial...</p>
           )}
           {!cargando && !error && entradas.length === 0 && (
             <p className="historial-vacio">Todavía no hay cambios registrados.</p>
           )}
+          {!cargando && entradas.length > 0 && visibles.length === 0 && <p className="historial-vacio">No hay cambios que coincidan con estos filtros.</p>}
 
-          {entradas.map((entrada, indice) => (
-            <div
-              className="historial-row"
-              key={`${entrada.fecha}-${entrada.usuario}-${indice}`}
-            >
-              <span className="historial-fecha">{formatearFecha(entrada.fecha)}</span>
-              <span className="historial-usuario">{entrada.usuario}</span>
-              <span className="historial-accion">
-                {entrada.accion}
-                {entrada.nombre ? <b> {entrada.nombre}</b> : null}
-              </span>
-              <span className="historial-entidad">
-                {iconoEntidad[entrada.entidad] ?? entrada.entidad}
-              </span>
-              <span className="historial-detalle">{entrada.detalle ?? '—'}</span>
-            </div>
+          {diasAgrupados.map(([dia, cambios]) => (
+            <section className="historial-day" key={dia} aria-label={dia}>
+              <h3>{dia}<span>{cambios.length} {cambios.length === 1 ? 'cambio' : 'cambios'}</span></h3>
+              {cambios.map((entrada, indice) => {
+                const tone = historyTone(entrada.accion);
+                const Icon = entrada.entidad === 'collection' ? Folder : entrada.entidad === 'sesion' ? LogIn
+                  : entrada.entidad === 'usuario' ? Users : entrada.entidad === 'proyecto' ? Globe
+                    : tone === 'deleted' ? Trash2 : tone === 'created' ? Plus : Pencil;
+                return (
+                  <details className={`historial-event compact ${tone}`} key={`${entrada.fecha}-${entrada.usuario}-${indice}`}>
+                    <summary title={`${entrada.accion} ${entrada.nombre ?? ''} · ${formatearFecha(entrada.fecha)} · Ver detalles`}>
+                      <time dateTime={entrada.fecha}>{historyTime(entrada.fecha)}</time>
+                      <span className="historial-event-icon"><Icon size={13} /></span>
+                      <span className="historial-event-main"><span>{entrada.accion}</span>{entrada.nombre && <b>{entrada.nombre}</b>}</span>
+                      <span className="historial-entidad">{iconoEntidad[entrada.entidad] ?? entrada.entidad}</span>
+                      <span className="historial-usuario" title={entrada.usuario}>{entrada.usuario}</span>
+                      <ChevronDown size={12} className="historial-expand" />
+                    </summary>
+                    <div className="historial-event-expanded">
+                      {entrada.nombre && <h4>{entrada.nombre}</h4>}
+                      <p className="historial-event-detail">{entrada.detalle || 'Sin detalles adicionales.'}</p>
+                      <small>{entrada.usuario} · {formatearFecha(entrada.fecha)}</small>
+                    </div>
+                  </details>
+                );
+              })}
+            </section>
           ))}
         </div>
+        <footer className="historial-footer"><span>{visibles.length} de {entradas.length} cambios cargados · Proyecto {eid}</span><span>Pulsa un cambio para ver detalles · Hasta 300 recientes</span></footer>
       </div>
     </div>
   );

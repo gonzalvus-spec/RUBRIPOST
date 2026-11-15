@@ -12,7 +12,8 @@ persistencia total de requests en **MongoDB**.
   proyecto (`eid`) y al dominio —no a la request, ni al método, ni a la
   colección—. El botón de cookies de la barra superior abre el tarro del
   proyecto completo: crear, editar, borrar, vaciar por dominio o todo, y
-  desactivar el envío automático (se recuerda entre sesiones).
+  desactivar el envío automático (se recuerda entre sesiones para cada proyecto
+  por separado). Editar o borrar una cookie también comprueba su proyecto.
 - **Multi-proyecto con CRUD**: cada proyecto es un espacio de trabajo
   aislado (su código es el `eid` de requests, colecciones y cookies). Se crean,
   editan y eliminan desde el selector de la barra superior: nombre, código,
@@ -27,6 +28,22 @@ persistencia total de requests en **MongoDB**.
   mover o eliminar requests y colecciones, además de ingresos y salidas) queda
   registrada en `historial` con usuario, entidad, detalle y fecha/hora. Se
   consulta desde el botón de reloj de la barra superior.
+  Cada proyecto muestra únicamente sus cambios. La vista compacta
+  agrupa por día y permite desplegar detalles, buscar por acción, nombre o detalle,
+  filtrar por usuario, tipo de elemento y período (hasta 300 cambios recientes).
+  La exportación JSON es exclusiva de colecciones y subcolecciones, no del historial.
+  Las horas se muestran en formato de 12 horas, con a. m. / p. m.
+  Los registros antiguos sin `eid` se conservan, pero no se atribuyen a un
+  proyecto arbitrariamente ni se mezclan con su historial. Al cambiar el código
+  de un proyecto también se migra el historial que ya tiene proyecto asignado.
+- **Exportación de colecciones a JSON**: el botón de descarga junto al título
+  COLECCIONES abre un selector de carpetas y subcarpetas. El archivo usa el
+  formato RubriPost, mantiene la jerarquía y el orden, e incluye todas las
+  peticiones guardadas de las carpetas elegidas, sin el límite del sidebar.
+  La autenticación y los headers sensibles se omiten por defecto; se pueden
+  incluir explícitamente. Revisa las URLs y bodies antes de compartir archivos.
+  En escritorio se abre **Guardar como** para elegir la ruta del JSON; cancelar
+  no cierra el selector de colecciones y los errores de escritura se muestran.
 - **Persistencia total**: se guardan `eid`, `nombre`, `contexto`, `metodo`, `url`,
   `body`, `headers`, `query_descripciones`, `auth`, `http_info`, `timestamp`,
   `updated_at` y `version`.
@@ -36,8 +53,21 @@ persistencia total de requests en **MongoDB**.
   `Key` quedan pendientes y no viajan; las descripciones se guardan aparte en
   `query_descripciones` porque no forman parte de la URL.
 - **Colecciones estilo Postman**: crea, renombra, duplica y elimina colecciones;
-  cada request vive dentro de una colección. Todo se guarda en la **misma**
-  colección de MongoDB (`api_requests`), sin historial aparte.
+  el botón de carpeta con `+` de cada colección crea subcolecciones anidadas.
+  Arrastra una carpeta al centro de otra para convertirla en subcolección,
+  o a sus bordes para colocarla antes/después, al mismo nivel. Para sacarla
+  al nivel principal, suéltala sobre el título **COLECCIONES**, que durante el
+  arrastre muestra **SOLTAR EN NIVEL PRINCIPAL**. No hay botones de conversión;
+  se conserva todo el contenido y no se permiten ciclos ni cambios de proyecto.
+  Arrastra una petición (GET, POST, etc.) sobre una colección o subcolección
+  para moverla, o entre peticiones para reordenarla. Mover o reordenar se aplica
+  de forma **optimista** en la UI y se persiste en segundo plano: la colección
+  aparece directamente en su posición definitiva, sin saltos ni esperas. Al
+  acercar el cursor a los bordes superior/inferior del sidebar durante un
+  arrastre, la lista se desplaza automáticamente. Duplicar o eliminar una
+  colección incluye sus subcolecciones y peticiones (con confirmación al borrar).
+  Cada request vive dentro de una colección. Todo se guarda en la **misma**
+  colección de MongoDB (`api_requests`).
 - **Upsert idempotente**: "Guardar" actualiza el documento si ya existe
   (`lastSavedId`); si es nueva, pide el nombre y la inserta.
 - **Sincronización en vivo entre PCs**: la app consulta MongoDB cada 5 s (y al
@@ -52,9 +82,35 @@ persistencia total de requests en **MongoDB**.
   URL con los botones Guardar y Enviar integrados, tabs horizontales
   (Params/Body/Auth/Headers) y barra de estado inferior. Paleta Rubrifact (verde
   esmeralda + dorado).
+- **Overview del workspace**: al abrir el programa se muestra la vista Overview
+  del proyecto activo con contadores de Collections, Requests y Environments,
+  Quick Actions y el listado jerárquico de colecciones, ocupando todo el ancho.
+  La pestaña Overview se oculta al abrir cualquier request y reaparece
+  automáticamente al cerrar la última pestaña de request.
+- **Chat por request**: cada request tiene un panel lateral derecho de notas
+  asociado a ella. Se puede contraer a un riel estrecho para liberar espacio;
+  ese estado se recuerda por usuario. Las notas se guardan por usuario y
+  proyecto en este equipo, y solo su autor puede editarlas o eliminarlas. Las
+  acciones aparecen al pasar el ratón sobre el mensaje propio, agrupadas en un
+  menú **⋯** con *Editar* y *Eliminar*; eliminar pide confirmación con
+  SweetAlert2 antes de borrar la nota.
 - **Sidebar** con árbol de colecciones, buscador, contador por colección,
   nombre de request, método, duplicar, renombrar (lápiz) y eliminar con
   confirmación.
+  El menú **⋯** de cada carpeta aparece al pasar el ratón y contiene, en este
+  orden: Nueva subcolección, Nueva request, Editar, Duplicar y Eliminar.
+  **Editar** permite cambiar el nombre y el color de la carpeta.
+  Una carpeta con subcolecciones no se muestra como vacía aunque no tenga
+  requests directas.
+  El estado abierto/cerrado se recuerda en este equipo por usuario y proyecto.
+  Solo cambia al abrir/cerrar manualmente: ni arrastrar carpetas/peticiones, ni crear
+  subcolecciones, ni buscar abre automáticamente una carpeta cerrada.
+- **Arranque rápido**: se muestra inmediatamente la última lista local de
+  colecciones del usuario/proyecto y se sincroniza con MongoDB en segundo plano.
+  La caché solo guarda metadatos de carpetas, nunca peticiones ni credenciales.
+  El editor JSON se carga por separado y ya no bloquea la interfaz inicial.
+  La primera carga sin caché depende de la conexión; mientras se actualiza se
+  indica «Caché local», sin presentar peticiones pendientes como carpetas vacías.
 - **Dirty state**: punto dorado y badge "Sin guardar" cuando hay cambios.
 - **Alertas SweetAlert2** con el diseño de la empresa para confirmaciones,
   éxitos y errores.
@@ -260,9 +316,11 @@ proyecto**: no depende de la request abierta, del método HTTP ni de la colecci�
 | `src/App.tsx` | Shell de la aplicación: monta la vista del cliente HTTP. |
 | `src/components/rubri/RubriApiView.tsx` | Orquestador de la vista: estado compartido, handlers, atajos y composición de módulos. |
 | `src/components/rubri/layout/` | `RubriTopbar`, `RubriProyectoSwitcher` (selector de proyecto), `RubriSidebar` (árbol, búsqueda y drag & drop), `RubriStatusBar` y `RubrifactLogo`, cada uno con su `.css`. |
-| `src/components/rubri/request/` | `RubriRequestHeader` (breadcrumb), `RubriCollectionMenu` (selector de colección propio), `RubriRequestBar` (método + URL + acciones) y `RubriRequestTabs` (Params / Body / Auth / Headers). |
+| `src/components/rubri/request/` | `RubriRequestHeader` (breadcrumb), `RubriCollectionMenu` (selector de colección propio), `RubriRequestBar` (método + URL + acciones), `RubriRequestTabs` (Params / Body / Auth / Headers) y `RequestChatPanel` (notas contraíbles de la request). |
 | `src/components/rubri/panels/` | `RubriQueryPanel` (query params), `RubriBodyPanel` (Monaco), `RubriAuthPanel`, `RubriHeadersPanel`, `RubriResponsePanel` y `RubriPanel.css` (estructura común de panel). |
 | `src/lib/queryParams.ts` | Lectura y reescritura de la query de la URL (`splitQuery`, `urlWithQuery`), fuente de verdad de la pestaña Params. |
+| `src/lib/chatNotes.ts` | Persistencia local de las notas de cada request por usuario y proyecto, con validación de autoría para editar/eliminar y migración del borrador al guardar. |
+| `src/lib/chatPreferences.ts` | Estado contraído/expandido del chat recordado por usuario. |
 | `src/components/rubri/modal/` | `RubriNameModal`: guardar y renombrar requests y colecciones. |
 | `src/components/rubri/constants.ts` · `types.ts` | Constantes (tokens, métodos, textos del modal) y tipos compartidos de la vista. |
 | `src/components/common/ResponseViewer.tsx` | Visor de respuesta con resaltado raw / JSON / XML. |

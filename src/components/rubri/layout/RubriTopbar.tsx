@@ -6,6 +6,7 @@ import {
   Cookie,
   LoaderCircle,
   LogOut,
+  LayoutDashboard,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
@@ -33,6 +34,8 @@ interface RubriTopbarProps {
   metodo: HttpMethod;
   isDirty: boolean;
   isRefreshing: boolean;
+  overviewOpen: boolean;
+  draftOpen: boolean;
   sesion: SesionUsuario | null;
   proyectos: ApiProyecto[];
   proyectoActivo: string;
@@ -40,11 +43,13 @@ interface RubriTopbarProps {
   onNuevoProyecto: () => void;
   onGestionarProyectos: () => void;
   onToggleSidebar: () => void;
+  onOpenOverview: () => void;
   onOpenHistorial: () => void;
   onOpenCookies: () => void;
   onLogout: () => void;
   onActivateTab: (id: string) => void;
   onCloseTab: (id: string) => void;
+  onCloseDraft: () => void;
   onNewRequest: () => void;
   onRefresh: () => void;
 }
@@ -57,6 +62,8 @@ export const RubriTopbar = ({
   metodo,
   isDirty,
   isRefreshing,
+  overviewOpen,
+  draftOpen,
   sesion,
   proyectos,
   proyectoActivo,
@@ -64,11 +71,13 @@ export const RubriTopbar = ({
   onNuevoProyecto,
   onGestionarProyectos,
   onToggleSidebar,
+  onOpenOverview,
   onOpenHistorial,
   onOpenCookies,
   onLogout,
   onActivateTab,
   onCloseTab,
+  onCloseDraft,
   onNewRequest,
   onRefresh,
 }: RubriTopbarProps) => {
@@ -102,7 +111,7 @@ export const RubriTopbar = ({
   };
 
   const handleCloseTab = (id: string) => {
-    if (id === lastSavedId) setMenuOpen(false);
+    if (!overviewOpen && id === lastSavedId) setMenuOpen(false);
     onCloseTab(id);
   };
 
@@ -135,8 +144,27 @@ export const RubriTopbar = ({
 
       <div className="topbar-tabs-area">
         <div className="topbar-tabs" role="tablist" aria-label="Requests abiertas">
+          {/* El Overview solo existe como pestaña cuando es la vista activa. */}
+          {overviewOpen && (
+            <div className="topbar-tab overview-tab active">
+              <button
+                type="button"
+                role="tab"
+                aria-selected
+                className="topbar-tab-main"
+                onClick={onOpenOverview}
+                title="Overview del workspace activo"
+              >
+                <span className="tab-overview-icon" aria-hidden="true">
+                  <LayoutDashboard size={13} />
+                </span>
+                <span className="topbar-tab-name">Overview</span>
+              </button>
+            </div>
+          )}
+
           {openTabs.map((item) => {
-            const isActive = item._id === lastSavedId;
+            const isActive = !overviewOpen && item._id === lastSavedId;
             const label = isActive ? nombre || item.nombre : item.nombre;
             const method = isActive ? metodo : item.metodo;
 
@@ -175,7 +203,7 @@ export const RubriTopbar = ({
             );
           })}
 
-          {!lastSavedId && (
+          {draftOpen && !lastSavedId && !overviewOpen && (
             <div className="topbar-tab active">
               <span className="topbar-tab-main is-draft">
                 <span className={clsx('tab-method', methodClass(metodo))}>
@@ -193,9 +221,9 @@ export const RubriTopbar = ({
               <button
                 type="button"
                 className="topbar-tab-close"
-                onClick={onNewRequest}
-                aria-label="Descartar request nueva"
-                title="Descartar"
+                onClick={onCloseDraft}
+                aria-label="Cerrar request nueva"
+                title="Cerrar request nueva"
               >
                 <X size={11} />
               </button>
@@ -236,7 +264,7 @@ export const RubriTopbar = ({
               <div className="tabs-menu-head">Pestañas abiertas ({openTabs.length})</div>
               <div className="tabs-menu-list">
                 {openTabs.map((item) => {
-                  const isActive = item._id === lastSavedId;
+                  const isActive = !overviewOpen && item._id === lastSavedId;
                   const label = isActive ? nombre || item.nombre : item.nombre;
                   const method = isActive ? metodo : item.metodo;
 

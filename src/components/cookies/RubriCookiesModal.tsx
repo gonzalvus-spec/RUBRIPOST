@@ -197,7 +197,7 @@ export const RubriCookiesModal = ({
   const borrar = async (cookie: CookieRegistro) => {
     setError(null);
     try {
-      await eliminarCookie(cookie.id);
+      await eliminarCookie(cookie.id, eid);
       await cargar();
     } catch (problema) {
       setError(textoError(problema));

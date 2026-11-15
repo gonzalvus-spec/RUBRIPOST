@@ -1,6 +1,7 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
 mod auth;
+mod export;
 mod config;
 mod fechas;
 mod http;
@@ -16,9 +17,13 @@ use http::{
 use mongo::{
     delete_api_collection, delete_api_request, duplicate_api_collection, duplicate_api_request,
     get_api_requests_full, get_api_workspace, move_api_request, reorder_api_collections,
+    get_api_workspace_snapshot,
+    export_api_collections,
+    move_api_collection,
     reorder_api_requests, save_api_collection, save_api_request_full,
 };
 use proyectos::{eliminar_proyecto, guardar_proyecto, listar_proyectos};
+use export::save_export_json;
 
 /// Carga la configuración antes de abrir el pool de MongoDB.
 ///
@@ -42,6 +47,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|_app| {
             // El historial se conserva 30 días: al arrancar se borran las
             // entradas más antiguas para que la colección no crezca sin límite.
@@ -57,9 +63,13 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            save_export_json,
             save_api_request_full,
             get_api_requests_full,
             get_api_workspace,
+            get_api_workspace_snapshot,
+            export_api_collections,
+            move_api_collection,
             save_api_collection,
             reorder_api_collections,
             reorder_api_requests,

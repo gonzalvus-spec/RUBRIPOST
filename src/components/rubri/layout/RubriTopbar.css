@@ -123,6 +123,17 @@
   color: var(--rubri-text-primary);
 }
 
+.topbar-tab.overview-tab .topbar-tab-main {
+  padding-right: 12px;
+}
+
+.tab-overview-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--rubri-gold);
+}
+
 .tab-method {
   font-family: var(--rubri-font-mono);
   font-size: 0.62rem;

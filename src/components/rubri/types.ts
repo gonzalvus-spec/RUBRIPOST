@@ -34,7 +34,7 @@ export interface DraggingRequest {
 
 export interface CollectionDropTarget {
   id: string;
-  after: boolean;
+  position: 'before' | 'inside' | 'after';
 }
 
 export interface RequestDropTarget {

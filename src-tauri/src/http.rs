@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use chrono::{DateTime, Duration, Utc};
-use mongodb::bson::{doc, oid::ObjectId};
+use mongodb::bson::{doc, oid::ObjectId, Document};
 use mongodb::{Collection, IndexModel};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, COOKIE, SET_COOKIE};
 use reqwest::Method;
@@ -157,6 +157,7 @@ pub struct GuardarCookiePayload {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct EliminarCookiePayload {
+    pub eid: String,
     pub id: String,
 }
 
@@ -461,11 +462,7 @@ pub async fn enviar_request(payload: EnviarRequestPayload) -> Result<RespuestaHt
 
     ensure_cookie_indexes().await?;
 
-    let eid = if payload.eid.trim().is_empty() {
-        "EMP-0042".to_string()
-    } else {
-        payload.eid.trim().to_string()
-    };
+    let eid = project_code(&payload.eid)?;
 
     let metodo = Method::from_bytes(payload.metodo.trim().to_uppercase().as_bytes())
         .map_err(|_| format!("Método HTTP inválido: {}", payload.metodo))?;
@@ -589,11 +586,7 @@ pub async fn enviar_request(payload: EnviarRequestPayload) -> Result<RespuestaHt
 #[tauri::command]
 pub async fn listar_cookies(payload: ListarCookiesPayload) -> Result<Vec<CookieRegistro>, String> {
     ensure_cookie_indexes().await?;
-    let eid = if payload.eid.trim().is_empty() {
-        "EMP-0042".to_string()
-    } else {
-        payload.eid.trim().to_string()
-    };
+    let eid = project_code(&payload.eid)?;
 
     // Sin URL se devuelve el tarro completo del proyecto: las cookies son del
     // proyecto, no de la request ni de la colección donde está guardada.
@@ -631,11 +624,7 @@ pub async fn guardar_cookie(payload: GuardarCookiePayload) -> Result<CookieRegis
         return Err("La cookie necesita un nombre".to_string());
     }
 
-    let eid = if payload.eid.trim().is_empty() {
-        "EMP-0042".to_string()
-    } else {
-        payload.eid.trim().to_string()
-    };
+    let eid = project_code(&payload.eid)?;
 
     let dominio = match payload
         .dominio
@@ -665,6 +654,7 @@ pub async fn guardar_cookie(payload: GuardarCookiePayload) -> Result<CookieRegis
 
     let cookies = get_cookies().await?;
     let ahora = Utc::now();
+    let editing = payload.id.as_deref().is_some_and(|id| !id.trim().is_empty());
 
     // Si llega un id se edita esa cookie; si no, se crea o reemplaza la que
     // coincida en dominio, nombre y ruta (igual que el tarro de Bruno).
@@ -675,14 +665,12 @@ pub async fn guardar_cookie(payload: GuardarCookiePayload) -> Result<CookieRegis
         .filter(|valor| !valor.is_empty())
     {
         Some(id) => {
-            let oid = ObjectId::parse_str(id)
-                .map_err(|_| "Identificador de cookie inválido".to_string())?;
-            doc! { "_id": oid }
+            cookie_id_filter(id, &eid)?
         }
         None => doc! { "eid": &eid, "dominio": &dominio, "nombre": &nombre, "ruta": &ruta },
     };
 
-    cookies
+    let result = cookies
         .update_one(
             filtro.clone(),
             doc! {
@@ -702,9 +690,12 @@ pub async fn guardar_cookie(payload: GuardarCookiePayload) -> Result<CookieRegis
                 },
             },
         )
-        .upsert(true)
+        .upsert(!editing)
         .await
         .map_err(|error| format!("No se pudo guardar la cookie: {error}"))?;
+    if editing && result.matched_count == 0 {
+        return Err("La cookie no existe en este proyecto".to_string());
+    }
 
     let guardada = cookies
         .find_one(filtro)
@@ -715,17 +706,28 @@ pub async fn guardar_cookie(payload: GuardarCookiePayload) -> Result<CookieRegis
     Ok(guardada.a_registro())
 }
 
-/// Elimina una cookie por su id.
+fn project_code(eid: &str) -> Result<String, String> {
+    if eid.trim().is_empty() { return Err("Indica el proyecto de las cookies".to_string()); }
+    Ok(eid.trim().to_string())
+}
+
+fn cookie_id_filter(id: &str, eid: &str) -> Result<Document, String> {
+    let object_id = ObjectId::parse_str(id)
+        .map_err(|_| "Identificador de cookie inválido".to_string())?;
+    Ok(doc! { "_id": object_id, "eid": project_code(eid)? })
+}
+
+/// Elimina exclusivamente una cookie del proyecto indicado.
 #[tauri::command]
 pub async fn eliminar_cookie(payload: EliminarCookiePayload) -> Result<(), String> {
-    let object_id = ObjectId::parse_str(&payload.id)
-        .map_err(|_| "Identificador de cookie inválido".to_string())?;
+    let filter = cookie_id_filter(&payload.id, &payload.eid)?;
 
     let cookies = get_cookies().await?;
-    cookies
-        .delete_one(doc! { "_id": object_id })
+    let result = cookies
+        .delete_one(filter)
         .await
         .map_err(|error| format!("No se pudo eliminar la cookie: {error}"))?;
+    if result.deleted_count == 0 { return Err("La cookie no existe en este proyecto".to_string()); }
 
     Ok(())
 }
@@ -735,11 +737,7 @@ pub async fn eliminar_cookie(payload: EliminarCookiePayload) -> Result<(), Strin
 /// Devuelve cuántas cookies se eliminaron.
 #[tauri::command]
 pub async fn limpiar_cookies(payload: LimpiarCookiesPayload) -> Result<u64, String> {
-    let eid = if payload.eid.trim().is_empty() {
-        "EMP-0042".to_string()
-    } else {
-        payload.eid.trim().to_string()
-    };
+    let eid = project_code(&payload.eid)?;
 
     let mut filtro = doc! { "eid": &eid };
     if let Some(dominio) = payload
@@ -790,6 +788,18 @@ fn regex_escape(texto: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn editar_y_eliminar_cookies_siempre_exige_su_proyecto() {
+        let id = ObjectId::new().to_hex();
+        let a = cookie_id_filter(&id, "PROYECTO-A").expect("filtro A");
+        let b = cookie_id_filter(&id, "PROYECTO-B").expect("filtro B");
+        assert_eq!(a.get_str("eid").unwrap(), "PROYECTO-A");
+        assert_eq!(a.get_object_id("_id").unwrap(), b.get_object_id("_id").unwrap());
+        assert_ne!(a, b);
+        assert!(cookie_id_filter(&id, " ").is_err());
+        assert!(project_code("").is_err());
+    }
 
     #[test]
     fn obtiene_el_dominio_sin_www() {

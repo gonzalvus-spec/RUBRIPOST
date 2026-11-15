@@ -1,3 +1,4 @@
+import '../../../lib/monacoSetup';
 import clsx from 'clsx';
 import { Check, LoaderCircle, TriangleAlert } from 'lucide-react';
 import { Editor } from '@monaco-editor/react';

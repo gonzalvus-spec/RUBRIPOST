@@ -38,7 +38,7 @@ export const RubriNameModal = ({
         }}
       >
         <div className="modal-header">
-          <h2 id="name-modal-title">{copy.title}</h2>
+          <h2 id="name-modal-title">{modal.mode === 'collectionCreate' && modal.targetId ? 'Nueva subcolección' : copy.title}</h2>
           <button
             type="button"
             className="icon-btn small"
@@ -66,9 +66,9 @@ export const RubriNameModal = ({
           }}
         />
 
-        {modal.mode === 'collectionCreate' && (
+        {copy.isCollectionModal && (
           <div className="color-picker">
-            <span className="modal-label">Color</span>
+            <span className="modal-label">Color de la carpeta</span>
             <div className="color-swatches">
               {COLLECTION_COLORS.map((color) => (
                 <button

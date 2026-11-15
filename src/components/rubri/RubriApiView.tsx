@@ -1,13 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
 
-import '../../lib/monacoSetup';
 import '../../App.css';
 import './RubriApiView.css';
 
 import { alertError, confirmAction, notify } from '../../lib/alerts';
 import {
   MAX_BODY_BYTES,
+  collectionSubtreeIds,
   errorMessage,
   useApiStore,
   type ApiCollection,
@@ -18,12 +18,16 @@ import { RubriSidebar } from './layout/RubriSidebar';
 import { RubriRequestHeader } from './request/RubriRequestHeader';
 import { RubriRequestBar } from './request/RubriRequestBar';
 import { RubriRequestTabs } from './request/RubriRequestTabs';
-import { RubriBodyPanel } from './panels/RubriBodyPanel';
 import { RubriAuthPanel } from './panels/RubriAuthPanel';
 import { RubriHeadersPanel } from './panels/RubriHeadersPanel';
 import { RubriQueryPanel } from './panels/RubriQueryPanel';
 import { enviarRequest } from '../../lib/httpClient';
+import { readSendCookies, writeSendCookies } from '../../lib/cookiePreferences';
 import { RubriResponsePanel } from './panels/RubriResponsePanel';
+import { RequestChatPanel } from './request/RequestChatPanel';
+import { moveChatNotes, removeChatNotes } from '../../lib/chatNotes';
+import { readChatCollapsed, writeChatCollapsed } from '../../lib/chatPreferences';
+import { RubriWorkspaceOverview } from './overview/RubriWorkspaceOverview';
 import { RubriStatusBar } from './layout/RubriStatusBar';
 import { RubriNameModal } from './modal/RubriNameModal';
 import { RubriCookiesModal } from '../cookies/RubriCookiesModal';
@@ -44,16 +48,7 @@ import type {
   TabId,
 } from './types';
 
-/** Preferencia del proyecto: enviar cookies guardadas con cada request. */
-const COOKIES_ENVIO_KEY = 'rubri.cookies.enviar';
-
-const leerEnviarCookies = (): boolean => {
-  try {
-    return localStorage.getItem(COOKIES_ENVIO_KEY) !== 'false';
-  } catch {
-    return true;
-  }
-};
+const RubriBodyPanel = lazy(() => import('./panels/RubriBodyPanel').then((module) => ({ default: module.RubriBodyPanel })));
 
 /**
  * Vista principal del cliente de API: orquesta el estado compartido y
@@ -74,6 +69,7 @@ export const RubriApiView = () => {
   const isSaving = useApiStore((state) => state.isSaving);
   const isRefreshing = useApiStore((state) => state.isRefreshing);
   const lastSavedId = useApiStore((state) => state.lastSavedId);
+  const lastSaveAt = useApiStore((state) => state.lastSaveAt);
 
   const proyectos = useApiStore((state) => state.proyectos);
   const refreshProyectos = useApiStore((state) => state.refreshProyectos);
@@ -85,6 +81,7 @@ export const RubriApiView = () => {
 
   const saveToMongo = useApiStore((state) => state.saveToMongo);
   const refreshFromMongo = useApiStore((state) => state.refreshFromMongo);
+  const hydrateCollections = useApiStore((state) => state.hydrateCollections);
   const loadRequest = useApiStore((state) => state.loadRequest);
   const newRequest = useApiStore((state) => state.newRequest);
   const duplicateRequest = useApiStore((state) => state.duplicateRequest);
@@ -98,6 +95,8 @@ export const RubriApiView = () => {
 
   // UI local
   const [activeTab, setActiveTab] = useState<TabId>('body');
+  /** La aplicación abre en el Overview del workspace, no en una request vacía. */
+  const [overviewOpen, setOverviewOpen] = useState(true);
   /**
    * Respuestas por request + método: cada combinación conserva la suya, así que
    * al cambiar de pestaña o de método el panel arranca vacío y al volver
@@ -111,13 +110,19 @@ export const RubriApiView = () => {
   const [modal, setModal] = useState<NameModalState>(CLOSED_MODAL);
   /** Pestañas abiertas (ids de requests). La request nueva se representa aparte. */
   const [openTabs, setOpenTabs] = useState<string[]>([]);
+  /** Solo es true cuando el usuario abrió explícitamente una request nueva. */
+  const [draftTabOpen, setDraftTabOpen] = useState(false);
+  /** Chat de la request activa: contraído deja solo un riel lateral. */
+  const [chatCollapsed, setChatCollapsed] = useState(false);
+  const [chatRevision, setChatRevision] = useState(0);
   const [historialAbierto, setHistorialAbierto] = useState(false);
   /**
    * Cookies del PROYECTO: el tarro es único por proyecto (EID) y el envío
    * automático se recuerda entre sesiones, sin depender de la request, el
    * método ni la colección seleccionada.
    */
-  const [enviarCookies, setEnviarCookies] = useState(() => leerEnviarCookies());
+  const [cookiePreferences, setCookiePreferences] = useState<Record<string, boolean>>({});
+  const enviarCookies = cookiePreferences[eid] ?? readSendCookies(eid);
   const [cookiesAbierto, setCookiesAbierto] = useState(false);
   const [cookiesRevision, setCookiesRevision] = useState(0);
 
@@ -127,6 +132,18 @@ export const RubriApiView = () => {
 
   const sesion = useAuthStore((state) => state.sesion);
   const cerrarSesion = useAuthStore((state) => state.cerrarSesion);
+  const usuarioActual = sesion?.usuario ?? '';
+
+  // Cada usuario conserva su preferencia de chat contraído entre recargas.
+  useEffect(() => {
+    setChatCollapsed(readChatCollapsed(usuarioActual));
+  }, [usuarioActual]);
+
+  const toggleChat = () => {
+    const next = !chatCollapsed;
+    setChatCollapsed(next);
+    writeChatCollapsed(usuarioActual, next);
+  };
 
   // Redimensionamiento y paneles expandibles/contraíbles estilo Postman
   const [sidebarWidth, setSidebarWidth] = useState(340);
@@ -140,6 +157,7 @@ export const RubriApiView = () => {
   const responseHeightRef = useRef(responseHeight);
   responseHeightRef.current = responseHeight;
   const mainRef = useRef<HTMLElement | null>(null);
+  const requestViewRef = useRef<HTMLDivElement | null>(null);
 
   // Clave del response que se muestra ahora (request guardada o borrador + método).
   const responseKey = `${lastSavedId ?? DRAFT_RESPONSE_KEY}::${metodo}`;
@@ -160,6 +178,12 @@ export const RubriApiView = () => {
       }
       return next;
     });
+
+  /** Descarta las notas de un borrador que se abandona sin guardar. */
+  const discardDraftChat = () => {
+    removeChatNotes(sesion?.usuario ?? '', eid, DRAFT_RESPONSE_KEY);
+    setChatRevision((value) => value + 1);
+  };
 
   // -------------------------------------------------------------------------
   // Redimensionamiento de paneles
@@ -200,7 +224,7 @@ export const RubriApiView = () => {
     document.body.classList.add('resizing-row');
     const startY = e.clientY;
     const startHeight = responseState === 'collapsed' ? 38 : responseHeightRef.current;
-    const mainEl = mainRef.current;
+    const mainEl = requestViewRef.current ?? mainRef.current;
     const maxAvailable = mainEl ? mainEl.clientHeight - 140 : 650;
 
     const onMouseMove = (moveEvent: MouseEvent) => {
@@ -248,8 +272,8 @@ export const RubriApiView = () => {
     targetId: string | null = null,
   ) => setModal({ ...CLOSED_MODAL, open: true, mode, value, targetId });
 
-  const openCollectionModal = () =>
-    setModal({ ...CLOSED_MODAL, open: true, mode: 'collectionCreate' });
+  const openCollectionModal = (parentId: string | null = null) =>
+    setModal({ ...CLOSED_MODAL, open: true, mode: 'collectionCreate', targetId: parentId });
 
   const submitModal = () => {
     const value = modal.value.trim();
@@ -261,9 +285,9 @@ export const RubriApiView = () => {
     if (modal.mode === 'rename' && modal.targetId) {
       void renameRequest(modal.targetId, value);
     } else if (modal.mode === 'collectionRename' && modal.targetId) {
-      void renameCollection(modal.targetId, value);
+      void renameCollection(modal.targetId, value, modal.color);
     } else if (modal.mode === 'collectionCreate') {
-      void createCollection(value, modal.color);
+      void createCollection(value, modal.color, modal.targetId);
     } else {
       void saveToMongo({ nombre: value });
     }
@@ -390,12 +414,8 @@ export const RubriApiView = () => {
   };
 
   const handleToggleEnviarCookies = (valor: boolean) => {
-    setEnviarCookies(valor);
-    try {
-      localStorage.setItem(COOKIES_ENVIO_KEY, valor ? 'true' : 'false');
-    } catch {
-      // Sin almacenamiento local: la preferencia vale solo para esta sesión.
-    }
+    setCookiePreferences((current) => ({ ...current, [eid]: valor }));
+    writeSendCookies(eid, valor);
   };
 
   const handleCopyResponse = () => {
@@ -406,7 +426,10 @@ export const RubriApiView = () => {
 
   const handleLoadSaved = async (request: ApiRequestDocument) => {
     if (!(await confirmDiscard())) return;
+    if (!lastSavedId) discardDraftChat();
     loadRequest(request);
+    setDraftTabOpen(false);
+    setOverviewOpen(false);
     setActiveTab('body');
   };
 
@@ -419,10 +442,29 @@ export const RubriApiView = () => {
       danger: true,
     });
     if (!confirmed) return;
+
+    const wasActive = !overviewOpen && request._id === lastSavedId;
+    const index = openTabs.indexOf(request._id);
+    const remaining = openTabs.filter((id) => id !== request._id);
     const removed = await deleteRequest(request._id);
-    if (removed) {
-      setOpenTabs((current) => current.filter((id) => id !== request._id));
+    if (!removed) return;
+
+    setOpenTabs(remaining);
+    if (!wasActive) return;
+
+    const fallbackId = remaining[Math.min(index, remaining.length - 1)];
+    const fallback = savedRequests.find((item) => item._id === fallbackId);
+    if (fallback) {
+      loadRequest(fallback);
+      setDraftTabOpen(false);
+      setOverviewOpen(false);
+    } else {
+      setDraftTabOpen(false);
+      discardDraftChat();
+      setOverviewOpen(true);
+      newRequest();
     }
+    setActiveTab('body');
   };
 
   const handleDuplicate = async (request: ApiRequestDocument) => {
@@ -432,7 +474,7 @@ export const RubriApiView = () => {
   const handleRenameRequest = (request: ApiRequestDocument) =>
     openNameModal('rename', request.nombre, request._id);
 
-  const handleRenameCollection = (collection: ApiCollection) =>
+  const handleEditCollection = (collection: ApiCollection) =>
     setModal({
       ...CLOSED_MODAL,
       open: true,
@@ -443,12 +485,13 @@ export const RubriApiView = () => {
     });
 
   const handleDeleteCollection = async (collection: ApiCollection) => {
+    const subtreeIds = collectionSubtreeIds(collections, collection._id);
     const total = savedRequests.filter(
-      (request) => request.coleccion_id === collection._id,
+      (request) => !!request.coleccion_id && subtreeIds.has(request.coleccion_id),
     ).length;
     const confirmed = await confirmAction({
       title: `¿Eliminar "${collection.nombre}"?`,
-      text: `Se eliminarán también ${total} request(s) que contiene. Esta acción no se puede deshacer.`,
+      text: `Se eliminarán también ${subtreeIds.size - 1} subcolección(es) y ${total} request(s) que contiene. Esta acción no se puede deshacer.`,
       confirmText: 'Eliminar todo',
       cancelText: 'Cancelar',
       danger: true,
@@ -466,23 +509,32 @@ export const RubriApiView = () => {
   const handleCambiarProyecto = async (codigo: string) => {
     if (codigo === eid) return;
     if (!(await confirmDiscard())) return;
+    discardDraftChat();
     await cambiarProyecto(codigo);
     setResponses({});
     setOpenTabs([]);
+    setDraftTabOpen(false);
+    setOverviewOpen(true);
     setActiveTab('body');
   };
 
   const handleNewRequest = async () => {
     if (!(await confirmDiscard())) return;
+    discardDraftChat();
     newRequest();
+    setDraftTabOpen(true);
+    setOverviewOpen(false);
     setActiveTab('body');
     clearDraftResponses();
   };
 
   const handleNewRequestIn = async (collectionId: string) => {
     if (!(await confirmDiscard())) return;
+    discardDraftChat();
     setActiveCollection(collectionId);
     newRequest({ coleccionId: collectionId });
+    setDraftTabOpen(true);
+    setOverviewOpen(false);
     setActiveTab('body');
     clearDraftResponses();
   };
@@ -493,16 +545,26 @@ export const RubriApiView = () => {
     .filter((request): request is ApiRequestDocument => Boolean(request));
 
   const activateTab = async (id: string) => {
-    if (id === lastSavedId) return;
+    if (id === lastSavedId) {
+      // La pestaña ya está cargada: solo hay que traerla de vuelta del Overview.
+      setDraftTabOpen(false);
+      setOverviewOpen(false);
+      setActiveTab('body');
+      return;
+    }
     const request = savedRequests.find((item) => item._id === id);
     if (!request) return;
     if (!(await confirmDiscard())) return;
+    if (!lastSavedId) discardDraftChat();
     loadRequest(request);
+    setDraftTabOpen(false);
+    setOverviewOpen(false);
     setActiveTab('body');
   };
 
+  /** Cierra una request concreta; si era la última, vuelve al Overview. */
   const closeTab = async (id: string) => {
-    const isActive = id === lastSavedId;
+    const isActive = !overviewOpen && id === lastSavedId;
     if (isActive && !(await confirmDiscard())) return;
 
     const index = openTabs.indexOf(id);
@@ -516,7 +578,41 @@ export const RubriApiView = () => {
 
     if (fallback) {
       loadRequest(fallback);
+      setDraftTabOpen(false);
+      setOverviewOpen(false);
     } else {
+      // No quedan ventanas de request: el Overview vuelve a ocupar el área.
+      setDraftTabOpen(false);
+      discardDraftChat();
+      setOverviewOpen(true);
+      newRequest();
+    }
+    setActiveTab('body');
+  };
+
+  /**
+   * Descarta el borrador (vacío o no). Si hay pestañas guardadas abiertas
+   * activa la más cercana; si no queda ninguna, vuelve al Overview.
+   */
+  const closeDraft = async () => {
+    if (isDirty && !(await confirmDiscard())) return;
+    setDraftTabOpen(false);
+    discardDraftChat();
+
+    if (openTabs.length === 0) {
+      setOverviewOpen(true);
+      newRequest();
+      setActiveTab('body');
+      return;
+    }
+
+    const fallbackId = openTabs[openTabs.length - 1];
+    const fallback = savedRequests.find((item) => item._id === fallbackId);
+    if (fallback) {
+      loadRequest(fallback);
+      setOverviewOpen(false);
+    } else {
+      setOverviewOpen(true);
       newRequest();
     }
     setActiveTab('body');
@@ -535,22 +631,33 @@ export const RubriApiView = () => {
   // Efectos
   // -------------------------------------------------------------------------
 
+  useLayoutEffect(() => {
+    hydrateCollections();
+  }, [hydrateCollections, sesion?.usuario, eid]);
+
   useEffect(() => {
+    let active = true;
     void (async () => {
-      // Los proyectos primero: de ahí sale el `eid` con el que se lee el resto.
-      const lista = await refreshProyectos();
+      const initialEid = useApiStore.getState().eid;
+      // La lista de carpetas no espera a los conteos de todos los proyectos.
+      const [lista] = await Promise.all([
+        refreshProyectos(),
+        refreshFromMongo({ silent: true, readOnly: true }),
+      ]);
       const activo = useApiStore.getState().eid;
+      if (!active || activo !== initialEid) return;
 
       if (lista.length > 0 && !lista.some((proyecto) => proyecto.codigo === activo)) {
         // El proyecto recordado ya no existe (se borró en otra PC): se abre otro.
         await cambiarProyecto(lista[0].codigo);
-      } else {
+      } else if (lista.some((proyecto) => proyecto.codigo === activo) && useApiStore.getState().collections.length === 0 && !useApiStore.getState().lastError) {
         await refreshFromMongo({ silent: true });
       }
 
       const error = useApiStore.getState().lastError;
-      if (error) {
-        void alertError('No se pudo conectar a MongoDB', error);
+      if (active && error) {
+        if (useApiStore.getState().collections.length > 0) notify.warning('Mostrando colecciones guardadas en este equipo', 'No se pudo sincronizar con MongoDB. Puedes volver a intentar con Refrescar.');
+        else void alertError('No se pudo conectar a MongoDB', error);
       }
     })();
 
@@ -570,11 +677,12 @@ export const RubriApiView = () => {
     document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
+      active = false;
       window.clearInterval(interval);
       window.removeEventListener('focus', syncNow);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [refreshFromMongo, refreshProyectos]);
+  }, [refreshFromMongo, refreshProyectos, sesion?.usuario]);
 
   // Cada request guardada o cargada mantiene su pestaña abierta.
   useEffect(() => {
@@ -584,12 +692,38 @@ export const RubriApiView = () => {
     );
   }, [lastSavedId]);
 
-  // Al guardar una request nueva, su respuesta pasa del borrador al id real.
+  // Al guardar el borrador su pestaña pasa a ser una pestaña guardada.
+  useEffect(() => {
+    if (lastSavedId && draftTabOpen) setDraftTabOpen(false);
+  }, [lastSavedId, draftTabOpen]);
+
+  // Si la request activa desaparece (por ejemplo, otra PC la eliminó) y el
+  // usuario no abrió un borrador, el Overview vuelve a ocupar el área.
+  const previousActiveIdRef = useRef(lastSavedId);
+  useEffect(() => {
+    const previousId = previousActiveIdRef.current;
+    previousActiveIdRef.current = lastSavedId;
+    if (previousId && !lastSavedId && !draftTabOpen) {
+      setOverviewOpen(true);
+      setActiveTab('body');
+    }
+  }, [lastSavedId, draftTabOpen]);
+
+  // Al guardar una request nueva, su respuesta y sus notas pasan del borrador
+  // al id real. Se exige un guardado reciente para no confundirlo con abrir
+  // una request existente desde un borrador.
   const previousSavedIdRef = useRef(lastSavedId);
+  const previousSaveAtRef = useRef(lastSaveAt);
   useEffect(() => {
     const previousId = previousSavedIdRef.current;
+    const previousSaveAt = previousSaveAtRef.current;
     previousSavedIdRef.current = lastSavedId;
-    if (previousId || !lastSavedId) return;
+    previousSaveAtRef.current = lastSaveAt;
+
+    if (previousId || !lastSavedId || lastSaveAt === previousSaveAt) return;
+
+    moveChatNotes(sesion?.usuario ?? '', eid, DRAFT_RESPONSE_KEY, lastSavedId);
+    setChatRevision((value) => value + 1);
 
     setResponses((current) => {
       const draftEntries = Object.entries(current).filter(([key]) =>
@@ -605,7 +739,7 @@ export const RubriApiView = () => {
       }
       return next;
     });
-  }, [lastSavedId]);
+  }, [lastSavedId, lastSaveAt, eid, sesion?.usuario]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -654,15 +788,20 @@ export const RubriApiView = () => {
         metodo={metodo}
         isDirty={isDirty}
         isRefreshing={isRefreshing}
+        overviewOpen={overviewOpen}
+        draftOpen={draftTabOpen}
+        onOpenOverview={() => setOverviewOpen(true)}
         onToggleSidebar={() => setSidebarCollapsed((value) => !value)}
         onActivateTab={(id) => void activateTab(id)}
         onCloseTab={(id) => void closeTab(id)}
+        onCloseDraft={() => void closeDraft()}
         onNewRequest={() => void handleNewRequest()}
         onRefresh={() => void refreshFromMongo()}
       />
 
       <div className="rubri-layout">
         <RubriSidebar
+          key={JSON.stringify([sesion?.usuario, eid])}
           collapsed={sidebarCollapsed}
           width={sidebarWidth}
           resizing={isResizingSidebar}
@@ -674,7 +813,7 @@ export const RubriApiView = () => {
           onDuplicateRequest={(request) => void handleDuplicate(request)}
           onDeleteRequest={(request) => void handleDelete(request)}
           onCreateCollection={openCollectionModal}
-          onRenameCollection={handleRenameCollection}
+          onEditCollection={handleEditCollection}
           onDuplicateCollection={(id) => void duplicateCollection(id)}
           onDeleteCollection={(collection) => void handleDeleteCollection(collection)}
         />
@@ -699,51 +838,79 @@ export const RubriApiView = () => {
           })}
           ref={mainRef}
         >
-          <RubriRequestHeader
-            collections={collections}
-            lastSavedId={lastSavedId}
-            isDirty={isDirty}
-            onChangeCollection={handleChangeDraftCollection}
-            onNewCollection={openCollectionModal}
-          />
-
-          <RubriRequestBar
-            isSaving={isSaving}
-            sending={sending}
-            jsonErrors={jsonErrors}
-            onSave={handleSave}
-            onSend={() => void handleSend()}
-          />
-
-          <RubriRequestTabs
-            activeTab={activeTab}
-            jsonErrors={jsonErrors}
-            onChange={setActiveTab}
-          />
-
-          {activeTab === 'params' && <RubriQueryPanel />}
-          {activeTab === 'body' && (
-            <RubriBodyPanel
-              jsonErrors={jsonErrors}
-              bodyBytes={bodyBytes}
-              onJsonErrorsChange={setJsonErrors}
+          {overviewOpen ? (
+            <RubriWorkspaceOverview
+              onNewRequest={() => void handleNewRequest()}
+              onNewCollection={openCollectionModal}
+              onOpenCollection={(collectionId) => void handleNewRequestIn(collectionId)}
+              onOpenHistory={() => setHistorialAbierto(true)}
+              onOpenCookies={() => setCookiesAbierto(true)}
+              onRefresh={() => void refreshFromMongo()}
             />
+          ) : (
+            <div className="request-view">
+              <div className="request-view-main" ref={requestViewRef}>
+                <RubriRequestHeader
+                  collections={collections}
+                  lastSavedId={lastSavedId}
+                  isDirty={isDirty}
+                  onChangeCollection={handleChangeDraftCollection}
+                  onNewCollection={openCollectionModal}
+                />
+
+                <RubriRequestBar
+                  isSaving={isSaving}
+                  sending={sending}
+                  jsonErrors={jsonErrors}
+                  onSave={handleSave}
+                  onSend={() => void handleSend()}
+                />
+
+                <RubriRequestTabs
+                  activeTab={activeTab}
+                  jsonErrors={jsonErrors}
+                  onChange={setActiveTab}
+                />
+
+                {activeTab === 'params' && <RubriQueryPanel />}
+                {activeTab === 'body' && (
+                  <Suspense fallback={<div className="panel request-panel"><p className="empty-state small">Cargando editor JSON…</p></div>}>
+                    <RubriBodyPanel
+                      jsonErrors={jsonErrors}
+                      bodyBytes={bodyBytes}
+                      onJsonErrorsChange={setJsonErrors}
+                    />
+                  </Suspense>
+                )}
+                {activeTab === 'auth' && <RubriAuthPanel />}
+                {activeTab === 'headers' && <RubriHeadersPanel />}
+                <RubriResponsePanel
+                  response={response}
+                  status={status}
+                  sending={sending}
+                  copied={copied}
+                  responseState={responseState}
+                  responseHeight={responseHeight}
+                  isResizing={isResizingResponse}
+                  setResponseState={setResponseState}
+                  setResponseHeight={setResponseHeight}
+                  onCopy={handleCopyResponse}
+                  onResizeMouseDown={handleResponseMouseDown}
+                />
+              </div>
+
+              <RequestChatPanel
+                collapsed={chatCollapsed}
+                onToggle={toggleChat}
+                user={sesion?.usuario ?? ''}
+                author={sesion?.nombre || sesion?.usuario || 'Tú'}
+                eid={eid}
+                requestKey={lastSavedId ?? DRAFT_RESPONSE_KEY}
+                requestName={nombre || suggestName(nombre, url)}
+                revision={chatRevision}
+              />
+            </div>
           )}
-          {activeTab === 'auth' && <RubriAuthPanel />}
-          {activeTab === 'headers' && <RubriHeadersPanel />}
-          <RubriResponsePanel
-            response={response}
-            status={status}
-            sending={sending}
-            copied={copied}
-            responseState={responseState}
-            responseHeight={responseHeight}
-            isResizing={isResizingResponse}
-            setResponseState={setResponseState}
-            setResponseHeight={setResponseHeight}
-            onCopy={handleCopyResponse}
-            onResizeMouseDown={handleResponseMouseDown}
-          />
         </main>
       </div>
 
@@ -759,6 +926,7 @@ export const RubriApiView = () => {
 
       {cookiesAbierto && (
         <RubriCookiesModal
+          key={eid}
           enviarCookies={enviarCookies}
           onToggleEnviarCookies={handleToggleEnviarCookies}
           refreshKey={cookiesRevision}
@@ -767,7 +935,7 @@ export const RubriApiView = () => {
       )}
 
       {historialAbierto && (
-        <HistorialModal onClose={() => setHistorialAbierto(false)} />
+        <HistorialModal key={eid} onClose={() => setHistorialAbierto(false)} />
       )}
 
       {modal.open && (

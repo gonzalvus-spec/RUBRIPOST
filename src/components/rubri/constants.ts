@@ -67,7 +67,7 @@ export const modalCopy = (mode: ModalMode) => {
         : mode === 'collectionCreate'
           ? 'Nueva colección'
           : mode === 'collectionRename'
-            ? 'Renombrar colección'
+            ? 'Editar colección'
             : 'Guardar request',
     label: isCollection ? 'Nombre de la colección' : 'Nombre de la request',
     placeholder: isCollection

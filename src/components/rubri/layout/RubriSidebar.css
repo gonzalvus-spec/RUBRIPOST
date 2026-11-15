@@ -111,6 +111,34 @@ body.resizing-col {
   overflow-x: hidden;
   overscroll-behavior: contain;
   padding: 0 10px 10px;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a2e transparent;
+}
+
+/* Mismos scrollbars neutros que Workspace Overview. */
+.sidebar-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background: #2a2a2e;
+  background-clip: content-box;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+  background-clip: content-box;
+}
+
+.sidebar-scroll::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .sidebar-section {
@@ -215,6 +243,27 @@ body.resizing-col {
   opacity: 0.4;
 }
 
+.coll-row.drop-inside {
+  outline: 1px dashed var(--rubri-gold);
+  outline-offset: -1px;
+}
+
+.side-title.collection-root-target {
+  outline: 1px dashed var(--rubri-border);
+  outline-offset: -1px;
+  border-radius: 5px;
+  letter-spacing: .03em;
+}
+
+.side-title.collection-root-target .side-title-actions {
+  visibility: hidden;
+}
+
+.side-title.collection-root-target.is-over {
+  outline-color: var(--rubri-gold);
+  color: var(--rubri-gold);
+}
+
 .coll-row.drop-before::before,
 .coll-row.drop-after::after {
   content: '';
@@ -289,13 +338,62 @@ body.resizing-col {
 .coll-actions {
   display: flex;
   gap: 1px;
+  flex-shrink: 0;
   opacity: 0;
-  transition: var(--rubri-transition);
+  pointer-events: none;
+  transition: opacity 0.12s ease;
 }
 
 .coll-row:hover .coll-actions,
-.coll-row.active .coll-actions {
+.coll-row:has(.collection-actions-trigger:focus-visible) .coll-actions,
+.coll-actions.menu-open {
   opacity: 1;
+  pointer-events: auto;
+}
+
+.sidebar-collection-menu {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  width: 200px;
+  padding: 4px;
+  border: 1px solid var(--rubri-border);
+  border-radius: 6px;
+  background: #18201b;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.sidebar-collection-menu-separator {
+  height: 1px;
+  margin: 3px 2px;
+  background: var(--rubri-border-soft);
+}
+
+.sidebar-collection-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 6px 9px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--rubri-text-primary);
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-collection-menu button:hover,
+.sidebar-collection-menu button:focus-visible {
+  outline: none;
+  background: var(--rubri-bg-hover);
+}
+
+.sidebar-collection-menu button.danger {
+  color: #ef7777;
 }
 
 .req-list {
@@ -311,6 +409,68 @@ body.resizing-col {
   padding-left: 0;
   margin-left: 0;
   border-left: none;
+}
+
+.empty-request-dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 54px;
+  margin: 4px 2px;
+  padding: 8px;
+  border: 1px dashed var(--rubri-border);
+  border-radius: 5px;
+  color: var(--rubri-text-muted);
+  font-size: 0.75rem;
+  pointer-events: none;
+}
+
+.empty-request-dropzone.is-over {
+  border-color: var(--rubri-gold);
+  color: var(--rubri-gold);
+}
+
+.empty-dropzone-reveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: grid-template-rows 180ms ease, opacity 150ms ease, transform 180ms ease;
+  pointer-events: none;
+}
+
+.empty-dropzone-reveal.visible {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.empty-dropzone-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.empty-state.small.empty-collection-label {
+  max-height: 50px;
+  overflow: hidden;
+  opacity: 1;
+  transition: max-height 180ms ease, padding 180ms ease, opacity 150ms ease;
+}
+
+.empty-state.small.empty-collection-label.hidden {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .empty-dropzone-reveal,
+  .empty-state.small.empty-collection-label {
+    transition: none;
+    transform: none;
+  }
 }
 
 .req-row {
@@ -333,6 +493,90 @@ body.resizing-col {
 
 .req-row.deleting {
   opacity: 0.4;
+}
+
+.req-row[draggable='true'],
+.req-row[draggable='true'] .req-main {
+  cursor: grab;
+}
+
+.req-row.dragging {
+  opacity: 0.35;
+}
+
+.req-drag-handle {
+  display: flex;
+  flex-shrink: 0;
+  padding-left: 3px;
+  color: var(--rubri-text-muted);
+  opacity: 0.4;
+}
+
+.req-row:hover .req-drag-handle {
+  opacity: 1;
+}
+
+.req-row.drop-before::before,
+.req-row.drop-after::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  height: 2px;
+  z-index: 3;
+  border-radius: 2px;
+  background: var(--rubri-gold);
+  box-shadow: 0 0 6px rgba(197, 160, 89, 0.6);
+  pointer-events: none;
+}
+
+.req-row.drop-before::before {
+  top: -1px;
+}
+
+.req-row.drop-after::after {
+  bottom: -1px;
+}
+
+.coll-row.request-drop-target {
+  background: rgba(197, 160, 89, 0.16);
+  outline: 1px dashed var(--rubri-gold);
+}
+
+.coll-row.suppress-request-highlight,
+.coll-row.suppress-request-highlight:hover {
+  background: transparent;
+  outline: none;
+}
+
+/* Durante el arrastre solo se dibuja la línea de inserción, sin sombrear
+   peticiones ni carpetas, aunque el destino sea otra colección. */
+.rubri-sidebar.request-dragging .coll-row,
+.rubri-sidebar.request-dragging .coll-row:hover,
+.rubri-sidebar.request-dragging .req-row,
+.rubri-sidebar.request-dragging .req-row:hover {
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+}
+
+.drag-ghost {
+  position: fixed;
+  top: -1000px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--rubri-gold);
+  border-radius: 5px;
+  background: #18201b;
+  color: #fff;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.drag-ghost-method {
+  font-weight: 800;
 }
 
 .req-main {

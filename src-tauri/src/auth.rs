@@ -95,6 +95,8 @@ pub struct NuevoUsuarioPayload {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RegistrarHistorialPayload {
+    #[serde(default)]
+    pub eid: Option<String>,
     pub usuario: String,
     /// Acción realizada: "Creó request", "Eliminó colección", "Ingresó", etc.
     pub accion: String,
@@ -110,6 +112,7 @@ pub struct RegistrarHistorialPayload {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HistorialEntrada {
+    pub eid: Option<String>,
     pub usuario: String,
     pub accion: String,
     pub entidad: String,
@@ -125,6 +128,7 @@ pub struct HistorialEntrada {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HistorialFiltro {
+    pub eid: String,
     #[serde(default)]
     pub usuario: Option<String>,
     #[serde(default)]
@@ -168,6 +172,7 @@ async fn ensure_auth_indexes() -> Result<(), String> {
     historial
         .create_indexes(vec![
             IndexModel::builder().keys(doc! { "fecha": -1 }).build(),
+            IndexModel::builder().keys(doc! { "eid": 1, "fecha": -1 }).build(),
             IndexModel::builder().keys(doc! { "usuario": 1, "fecha": -1 }).build(),
         ])
         .await
@@ -220,6 +225,12 @@ fn verificar_password(password: &str, hash: &str) -> bool {
 }
 
 async fn insertar_historial(entrada: RegistrarHistorialPayload) -> Result<(), String> {
+    // Los cambios de carpetas, colecciones y subcolecciones no forman parte de
+    // la actividad relevante del workspace.
+    if entrada.entidad.trim().eq_ignore_ascii_case("collection") {
+        return Ok(());
+    }
+
     let usuario = entrada.usuario.trim();
     if usuario.is_empty() {
         return Err("El historial requiere un usuario".to_string());
@@ -227,6 +238,7 @@ async fn insertar_historial(entrada: RegistrarHistorialPayload) -> Result<(), St
 
     let historial = get_historial().await?;
     let documento = doc! {
+        "eid": entrada.eid.as_deref().map(str::trim).filter(|eid| !eid.is_empty()),
         "usuario": usuario,
         "accion": entrada.accion.trim(),
         "entidad": entrada.entidad.trim(),
@@ -349,6 +361,7 @@ pub async fn login(payload: LoginPayload) -> Result<SesionUsuario, String> {
     let sesion = documento.a_sesion();
 
     let _ = insertar_historial(RegistrarHistorialPayload {
+        eid: None,
         usuario: sesion.usuario.clone(),
         accion: "Ingresó".to_string(),
         entidad: "sesion".to_string(),
@@ -446,6 +459,7 @@ pub async fn crear_usuario(payload: NuevoUsuarioPayload) -> Result<SesionUsuario
     };
 
     let _ = insertar_historial(RegistrarHistorialPayload {
+        eid: None,
         usuario: autor,
         accion: "Creó usuario".to_string(),
         entidad: "usuario".to_string(),
@@ -463,6 +477,7 @@ pub async fn crear_usuario(payload: NuevoUsuarioPayload) -> Result<SesionUsuario
 #[tauri::command]
 pub async fn cerrar_sesion(usuario: String) -> Result<(), String> {
     insertar_historial(RegistrarHistorialPayload {
+        eid: None,
         usuario,
         accion: "Cerró sesión".to_string(),
         entidad: "sesion".to_string(),
@@ -476,12 +491,30 @@ pub async fn cerrar_sesion(usuario: String) -> Result<(), String> {
 /// Registra una acción en la bitácora (la fecha la pone el servidor).
 #[tauri::command]
 pub async fn registrar_historial(payload: RegistrarHistorialPayload) -> Result<(), String> {
+    if payload.eid.as_deref().unwrap_or_default().trim().is_empty() {
+        return Err("Indica el proyecto del cambio".to_string());
+    }
     insertar_historial(payload).await
 }
 
-/// Devuelve la bitácora más reciente, opcionalmente filtrada por usuario.
+fn consulta_historial(filtro: &HistorialFiltro) -> Result<Document, String> {
+    let eid = filtro.eid.trim();
+    if eid.is_empty() {
+        return Err("Indica el proyecto del historial".to_string());
+    }
+    // Además de impedir nuevas altas, oculta entradas antiguas de colecciones.
+    let mut query = doc! { "eid": eid, "entidad": { "$ne": "collection" } };
+    if let Some(usuario) = filtro.usuario.as_deref() {
+        let clave = normalizar_usuario(usuario);
+        if !clave.is_empty() { query.insert("usuario", clave); }
+    }
+    Ok(query)
+}
+
+/// Devuelve exclusivamente la bitácora del proyecto indicado.
 #[tauri::command]
 pub async fn listar_historial(filtro: HistorialFiltro) -> Result<Vec<HistorialEntrada>, String> {
+    let query = consulta_historial(&filtro)?;
     if let Err(error) = purgar_historial_antiguo().await {
         log::warn!("No se pudo purgar el historial: {error}");
     }
@@ -490,14 +523,6 @@ pub async fn listar_historial(filtro: HistorialFiltro) -> Result<Vec<HistorialEn
         .limit
         .unwrap_or(HISTORIAL_LIMITE_DEFECTO)
         .clamp(1, HISTORIAL_LIMITE_MAX) as i64;
-
-    let mut query = Document::new();
-    if let Some(usuario) = filtro.usuario.as_deref() {
-        let clave = normalizar_usuario(usuario);
-        if !clave.is_empty() {
-            query.insert("usuario", clave);
-        }
-    }
 
     let historial = get_historial().await?;
     let mut cursor = historial
@@ -529,6 +554,7 @@ pub async fn listar_historial(filtro: HistorialFiltro) -> Result<Vec<HistorialEn
                 .unwrap_or_default();
 
             HistorialEntrada {
+                eid: documento.get_str("eid").ok().map(str::to_string),
                 usuario: documento.get_str("usuario").unwrap_or_default().to_string(),
                 accion: documento.get_str("accion").unwrap_or_default().to_string(),
                 entidad: documento.get_str("entidad").unwrap_or_default().to_string(),
@@ -565,6 +591,18 @@ pub async fn hay_usuarios() -> Result<bool, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn historial_exige_proyecto_y_lo_incluye_en_la_consulta() {
+        let mut filtro = HistorialFiltro { eid: "PROYECTO-A".into(), usuario: Some(" ANA ".into()), limit: None };
+        let query = consulta_historial(&filtro).expect("filtro por proyecto");
+        assert_eq!(query.get_str("eid").unwrap(), "PROYECTO-A");
+        assert_eq!(query.get_str("usuario").unwrap(), "ana");
+        filtro.eid = "PROYECTO-B".into();
+        assert_ne!(query, consulta_historial(&filtro).unwrap());
+        filtro.eid = " ".into();
+        assert!(consulta_historial(&filtro).is_err());
+    }
 
     #[test]
     fn normaliza_el_usuario() {

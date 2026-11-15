@@ -511,6 +511,10 @@ async fn migrar_eid(origen: &str, destino: &str) -> Result<(), String> {
         .await
         .map_err(|error| format!("No se pudieron migrar las cookies: {error}"))?;
 
+    datos.collection::<mongodb::bson::Document>("historial")
+        .update_many(doc! { "eid": origen }, doc! { "$set": { "eid": destino } })
+        .await.map_err(|error| format!("No se pudo migrar el historial del proyecto: {error}"))?;
+
     log::info!(
         "EID migrado {} → {} ({} documentos, {} cookies)",
         origen,

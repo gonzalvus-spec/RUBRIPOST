@@ -14,6 +14,7 @@ export const RubriStatusBar = ({ sending, status }: RubriStatusBarProps) => {
   const savedRequests = useApiStore((state) => state.savedRequests);
   const lastSyncAt = useApiStore((state) => state.lastSyncAt);
   const lastError = useApiStore((state) => state.lastError);
+  const isWorkspaceCached = useApiStore((state) => state.isWorkspaceCached);
 
   return (
     <footer className="statusbar">
@@ -35,7 +36,7 @@ export const RubriStatusBar = ({ sending, status }: RubriStatusBarProps) => {
 
       <div className="statusbar-right">
         <span>
-          {collections.length} colecciones · {savedRequests.length} requests
+          {collections.length} colecciones · {isWorkspaceCached ? '…' : savedRequests.length} requests
         </span>
         <span className="statusbar-sep" />
         <span>Ctrl+S guardar · Ctrl+Enter enviar</span>
@@ -47,11 +48,12 @@ export const RubriStatusBar = ({ sending, status }: RubriStatusBarProps) => {
               ? lastError
               : lastSyncAt
                 ? `Última sincronización: ${new Date(lastSyncAt).toLocaleTimeString()}`
-                : 'Sincronización automática con MongoDB'
+                : isWorkspaceCached ? 'Lista local de colecciones; las peticiones se actualizarán desde MongoDB' : 'Conectando con MongoDB'
           }
         >
           <span className="sync-dot" />
-          {lastError ? 'Sin conexión' : 'Conectado'}
+          {lastError ? isWorkspaceCached ? 'Caché local · sin conexión' : 'Sin conexión'
+            : isWorkspaceCached ? 'Caché local · sincronizando' : lastSyncAt ? 'Conectado' : 'Conectando…'}
         </span>
         <span className="statusbar-sep" />
         <span>v2.4</span>

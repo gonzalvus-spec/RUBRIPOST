@@ -157,6 +157,8 @@ pub struct ApiCollectionDocument {
     pub eid: String,
     pub nombre: String,
     #[serde(default)]
+    pub parent_id: Option<String>,
+    #[serde(default)]
     pub color: String,
     #[serde(default)]
     pub orden: i32,
@@ -175,6 +177,8 @@ pub struct ApiCollectionPayload {
     pub eid: String,
     pub nombre: String,
     #[serde(default)]
+    pub parent_id: Option<String>,
+    #[serde(default)]
     pub color: Option<String>,
     #[serde(default)]
     pub orden: Option<i32>,
@@ -187,6 +191,7 @@ pub struct ApiCollectionRecord {
     pub id: String,
     pub eid: String,
     pub nombre: String,
+    pub parent_id: Option<String>,
     pub color: String,
     pub orden: i32,
     pub timestamp: String,
@@ -203,6 +208,7 @@ impl ApiCollectionDocument {
             id: id.to_hex(),
             eid: self.eid,
             nombre: self.nombre,
+            parent_id: self.parent_id,
             color: if self.color.is_empty() {
                 DEFAULT_COLLECTION_COLOR.to_string()
             } else {
@@ -464,18 +470,16 @@ async fn ensure_indexes(collection: &Collection<ApiRequestDocument>) -> Result<(
 async fn ensure_default_collection(eid: &str) -> Result<Vec<ApiCollectionRecord>, String> {
     let handle = get_collections_handle().await?;
 
-    let existing = handle
-        .count_documents(doc! { "eid": eid, "tipo": TIPO_COLLECTION })
-        .await
-        .map_err(|error| format!("No se pudieron contar las colecciones: {error}"))?;
-
-    if existing == 0 {
+    // La misma lectura sirve para comprobar si hay carpetas y devolverlas.
+    let mut collections = list_collections(eid).await?;
+    if collections.is_empty() {
         let now = Utc::now();
         let document = ApiCollectionDocument {
             id: Some(ObjectId::new()),
             tipo: TIPO_COLLECTION.to_string(),
             eid: eid.to_string(),
             nombre: DEFAULT_COLLECTION_NAME.to_string(),
+            parent_id: None,
             color: DEFAULT_COLLECTION_COLOR.to_string(),
             orden: 0,
             timestamp: now,
@@ -492,9 +496,9 @@ async fn ensure_default_collection(eid: &str) -> Result<Vec<ApiCollectionRecord>
             DEFAULT_COLLECTION_NAME,
             eid
         );
+        collections = list_collections(eid).await?;
     }
 
-    let collections = list_collections(eid).await?;
     let Some(first) = collections.first() else {
         return Ok(collections);
     };
@@ -875,6 +879,19 @@ async fn fetch_requests(
     Ok(records)
 }
 
+/// Arranque: lectura concurrente sin crear datos para un proyecto aún no validado.
+#[tauri::command]
+pub async fn get_api_workspace_snapshot(filter: ApiRequestFilter) -> Result<ApiWorkspace, String> {
+    let handle = get_collection().await?;
+    ensure_indexes(&handle).await?;
+    let limit = if filter.limit == 0 { DEFAULT_LIMIT } else { filter.limit.min(MAX_LIMIT) } as i64;
+    let (collections, requests) = tokio::try_join!(
+        list_collections(&filter.eid),
+        fetch_requests(&handle, &filter.eid, limit),
+    )?;
+    Ok(ApiWorkspace { collections, requests })
+}
+
 /// Instantánea completa del workspace: colecciones + requests del EID.
 ///
 /// Es la única lectura que necesita el sidebar, de modo que ambas listas
@@ -908,6 +925,38 @@ pub async fn get_api_workspace(filter: ApiRequestFilter) -> Result<ApiWorkspace,
     })
 }
 
+#[derive(Deserialize)]
+pub struct ExportCollectionsPayload {
+    pub eid: String,
+    pub ids: Vec<String>,
+}
+
+/// Exporta todas las peticiones seleccionadas, sin el límite de la vista lateral.
+#[tauri::command]
+pub async fn export_api_collections(payload: ExportCollectionsPayload) -> Result<ApiWorkspace, String> {
+    if payload.ids.is_empty() {
+        return Err("Selecciona al menos una colección".to_string());
+    }
+    let selected: std::collections::HashSet<String> = payload.ids.into_iter().collect();
+    let collections: Vec<_> = list_collections(&payload.eid).await?.into_iter()
+        .filter(|item| selected.contains(&item.id)).collect();
+    if collections.len() != selected.len() {
+        return Err("Alguna colección ya no existe en este proyecto. Actualiza la lista.".to_string());
+    }
+    let handle = get_collection().await?;
+    let mut cursor = handle.find(doc! {
+        "eid": &payload.eid, "tipo": TIPO_REQUEST,
+        "coleccion_id": { "$in": selected.into_iter().collect::<Vec<_>>() },
+    }).sort(doc! { "orden": 1, "timestamp": -1 }).await
+        .map_err(|error| format!("No se pudieron exportar las peticiones: {error}"))?;
+    let mut requests = Vec::new();
+    while cursor.advance().await.map_err(|error| error.to_string())? {
+        let document = cursor.deserialize_current().map_err(|error| error.to_string())?;
+        requests.push(document.into_record()?);
+    }
+    Ok(ApiWorkspace { collections, requests })
+}
+
 /// Crea o actualiza una colección. Devuelve su `_id` hexadecimal.
 #[tauri::command]
 pub async fn save_api_collection(payload: ApiCollectionPayload) -> Result<String, String> {
@@ -925,6 +974,22 @@ pub async fn save_api_collection(payload: ApiCollectionPayload) -> Result<String
     let now = Utc::now();
     let eid = payload.eid.trim().to_string();
     let nombre = payload.nombre.trim().to_string();
+    let parent_id = payload.parent_id.as_deref().map(str::trim)
+        .filter(|id| !id.is_empty()).map(str::to_string);
+    if let Some(parent) = &parent_id {
+        let mut next = Some(parent.clone());
+        let mut visited = std::collections::HashSet::new();
+        while let Some(id) = next {
+            if payload.id.as_deref() == Some(id.as_str()) || !visited.insert(id.clone()) {
+                return Err("Una colección no puede estar dentro de sí misma".to_string());
+            }
+            let ancestor = handle.find_one(doc! {
+                "_id": parse_id(&id)?, "eid": &eid, "tipo": TIPO_COLLECTION
+            }).await.map_err(|error| format!("Error al validar la colección padre: {error}"))?
+                .ok_or_else(|| "La colección padre no existe en este proyecto".to_string())?;
+            next = ancestor.parent_id;
+        }
+    }
     let color = payload
         .color
         .map(|value| value.trim().to_string())
@@ -934,6 +999,7 @@ pub async fn save_api_collection(payload: ApiCollectionPayload) -> Result<String
         Some(object_id) => {
             let mut set_fields: Document = doc! {
                 "nombre": &nombre,
+                "parent_id": parent_id.clone(),
                 "updated_at": bson::DateTime::from_chrono(now),
             };
             if let Some(color) = &color {
@@ -945,7 +1011,7 @@ pub async fn save_api_collection(payload: ApiCollectionPayload) -> Result<String
 
             let result = handle
                 .update_one(
-                    doc! { "_id": object_id, "tipo": TIPO_COLLECTION },
+                    doc! { "_id": object_id, "eid": &eid, "tipo": TIPO_COLLECTION },
                     doc! { "$set": set_fields },
                 )
                 .await
@@ -974,6 +1040,7 @@ pub async fn save_api_collection(payload: ApiCollectionPayload) -> Result<String
                 tipo: TIPO_COLLECTION.to_string(),
                 eid,
                 nombre: nombre.clone(),
+                parent_id,
                 color: color.unwrap_or_else(|| DEFAULT_COLLECTION_COLOR.to_string()),
                 orden,
                 timestamp: now,
@@ -989,6 +1056,28 @@ pub async fn save_api_collection(payload: ApiCollectionPayload) -> Result<String
             Ok(object_id.to_hex())
         }
     }
+}
+
+#[derive(Deserialize)]
+pub struct MoveCollectionPayload {
+    pub id: String,
+    pub eid: String,
+    pub parent_id: Option<String>,
+}
+
+/// Cambia solo la carpeta padre; conserva todas sus subcolecciones y peticiones.
+#[tauri::command]
+pub async fn move_api_collection(payload: MoveCollectionPayload) -> Result<(), String> {
+    let handle = get_collections_handle().await?;
+    let source = handle.find_one(doc! {
+        "_id": parse_id(&payload.id)?, "eid": &payload.eid, "tipo": TIPO_COLLECTION,
+    }).await.map_err(|error| error.to_string())?
+        .ok_or_else(|| "La colección no existe en este proyecto".to_string())?;
+    save_api_collection(ApiCollectionPayload {
+        id: Some(payload.id), eid: source.eid, nombre: source.nombre,
+        color: Some(source.color), orden: Some(source.orden), parent_id: payload.parent_id,
+    }).await?;
+    Ok(())
 }
 
 /// Payload para reordenar colecciones con drag & drop en el sidebar.
@@ -1029,33 +1118,50 @@ pub async fn reorder_api_collections(payload: ReorderCollectionsPayload) -> Resu
     Ok(())
 }
 
-/// Elimina una colección. Por defecto elimina también sus requests.
+/// Lee el árbol completo antes de modificarlo (sin recursión asíncrona).
+async fn collection_subtree(id: &str) -> Result<Vec<ApiCollectionDocument>, String> {
+    let handle = get_collections_handle().await?;
+    let root = handle.find_one(doc! { "_id": parse_id(id)?, "tipo": TIPO_COLLECTION })
+        .await.map_err(|error| format!("Error al buscar la colección: {error}"))?
+        .ok_or_else(|| "La colección no existe o ya fue eliminada".to_string())?;
+    let mut tree = vec![root];
+    let mut visited = std::collections::HashSet::from([id.to_string()]);
+    let mut index = 0;
+    while index < tree.len() {
+        let parent = tree[index].id.ok_or("Colección sin _id")?.to_hex();
+        let mut cursor = handle.find(doc! {
+            "tipo": TIPO_COLLECTION, "eid": &tree[0].eid, "parent_id": parent
+        }).await.map_err(|error| format!("Error al leer subcolecciones: {error}"))?;
+        while cursor.advance().await.map_err(|error| error.to_string())? {
+            let child = cursor.deserialize_current().map_err(|error| error.to_string())?;
+            if visited.insert(child.id.ok_or("Colección sin _id")?.to_hex()) {
+                tree.push(child);
+            }
+        }
+        index += 1;
+    }
+    Ok(tree)
+}
+
+/// Elimina una colección y sus subcolecciones, con sus requests si se solicita.
 #[tauri::command]
 pub async fn delete_api_collection(payload: DeleteCollectionPayload) -> Result<(), String> {
-    let object_id = parse_id(&payload.id)?;
-    let hex = object_id.to_hex();
+    let tree = collection_subtree(&payload.id).await?;
+    let ids: Vec<ObjectId> = tree.iter().filter_map(|item| item.id).collect();
+    let hex_ids: Vec<String> = ids.iter().map(|id| id.to_hex()).collect();
 
     let handle = get_collections_handle().await?;
-    let result = handle
-        .delete_one(doc! { "_id": object_id, "tipo": TIPO_COLLECTION })
-        .await
-        .map_err(|error| format!("Error al eliminar la colección: {error}"))?;
-
-    if result.deleted_count == 0 {
-        return Err("La colección no existe o ya fue eliminada".to_string());
-    }
-
     let requests = get_collection().await?;
     let affected = if payload.delete_requests {
         requests
-            .delete_many(doc! { "tipo": TIPO_REQUEST, "coleccion_id": &hex })
+            .delete_many(doc! { "tipo": TIPO_REQUEST, "coleccion_id": { "$in": &hex_ids } })
             .await
             .map_err(|error| format!("Error al eliminar las requests de la colección: {error}"))?
             .deleted_count
     } else {
         requests
             .update_many(
-                doc! { "tipo": TIPO_REQUEST, "coleccion_id": &hex },
+                doc! { "tipo": TIPO_REQUEST, "coleccion_id": { "$in": &hex_ids } },
                 doc! { "$unset": { "coleccion_id": "" } },
             )
             .await
@@ -1063,9 +1169,12 @@ pub async fn delete_api_collection(payload: DeleteCollectionPayload) -> Result<(
             .modified_count
     };
 
+    handle.delete_many(doc! { "_id": { "$in": ids }, "tipo": TIPO_COLLECTION })
+        .await.map_err(|error| format!("Error al eliminar las colecciones: {error}"))?;
+
     log::info!(
         "Colección {} eliminada ({} requests afectadas)",
-        hex,
+        payload.id,
         affected
     );
 
@@ -1075,36 +1184,33 @@ pub async fn delete_api_collection(payload: DeleteCollectionPayload) -> Result<(
 /// Duplica una colección junto con todas sus requests.
 #[tauri::command]
 pub async fn duplicate_api_collection(id: String) -> Result<String, String> {
-    let object_id = parse_id(&id)?;
+    let tree = collection_subtree(&id).await?;
     let handle = get_collections_handle().await?;
-
-    let source = handle
-        .find_one(doc! { "_id": object_id, "tipo": TIPO_COLLECTION })
-        .await
-        .map_err(|error| format!("Error al buscar la colección a duplicar: {error}"))?
-        .ok_or_else(|| "No se encontró la colección a duplicar".to_string())?;
-
-    let new_id = ObjectId::new();
     let now = Utc::now();
-    let new_hex = new_id.to_hex();
-
-    let copy = ApiCollectionDocument {
-        id: Some(new_id),
-        nombre: format!("{} (copia)", source.nombre),
-        orden: source.orden + 1,
-        timestamp: now,
-        updated_at: now,
-        ..source
-    };
-
-    handle
-        .insert_one(&copy)
-        .await
-        .map_err(|error| format!("Error al duplicar la colección: {error}"))?;
+    let mut mapping = std::collections::HashMap::new();
+    for source in &tree {
+        mapping.insert(source.id.ok_or("Colección sin _id")?.to_hex(), ObjectId::new());
+    }
+    let new_hex = mapping.get(&id).ok_or("Colección sin _id")?.to_hex();
+    for source in tree {
+        let old_id = source.id.ok_or("Colección sin _id")?.to_hex();
+        let parent_id = source.parent_id.as_ref().and_then(|parent| mapping.get(parent))
+            .map(|id| id.to_hex()).or(source.parent_id.clone());
+        let copy = ApiCollectionDocument {
+            id: mapping.get(&old_id).copied(),
+            nombre: if old_id == id { format!("{} (copia)", source.nombre) } else { source.nombre.clone() },
+            parent_id,
+            timestamp: now,
+            updated_at: now,
+            ..source
+        };
+        handle.insert_one(&copy).await
+            .map_err(|error| format!("Error al duplicar la colección: {error}"))?;
+    }
 
     let requests = get_collection().await?;
     let mut cursor = requests
-        .find(doc! { "tipo": TIPO_REQUEST, "coleccion_id": object_id.to_hex() })
+        .find(doc! { "tipo": TIPO_REQUEST, "coleccion_id": { "$in": mapping.keys().cloned().collect::<Vec<_>>() } })
         .await
         .map_err(|error| format!("Error al leer las requests de la colección: {error}"))?;
 
@@ -1118,7 +1224,8 @@ pub async fn duplicate_api_collection(id: String) -> Result<String, String> {
             .deserialize_current()
             .map_err(|error| format!("Request inválida en MongoDB: {error}"))?;
         document.id = Some(ObjectId::new());
-        document.coleccion_id = Some(new_hex.clone());
+        document.coleccion_id = document.coleccion_id.as_ref()
+            .and_then(|old| mapping.get(old)).map(|id| id.to_hex());
         document.timestamp = now;
         document.updated_at = now;
         document.version = 1;
@@ -1134,7 +1241,7 @@ pub async fn duplicate_api_collection(id: String) -> Result<String, String> {
 
     log::info!(
         "Colección duplicada: {} -> {} ({} requests)",
-        object_id.to_hex(),
+        id,
         new_hex,
         copies.len()
     );
@@ -1325,6 +1432,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn coleccion_antigua_sin_padre_sigue_siendo_raiz() {
+        let now = bson::DateTime::from_chrono(Utc::now());
+        let document: ApiCollectionDocument = bson::from_document(doc! {
+            "_id": ObjectId::new(), "eid": "TEST", "nombre": "General",
+            "timestamp": now, "updated_at": now,
+        }).expect("leer colección anterior sin migración");
+        assert_eq!(document.parent_id, None);
+        assert_eq!(document.into_record().expect("record").parent_id, None);
+    }
+
+    #[test]
+    fn subcoleccion_conserva_padre_al_serializar() {
+        let parent = ObjectId::new().to_hex();
+        let payload: ApiCollectionPayload = bson::from_document(doc! {
+            "eid": "TEST", "nombre": "Subcolección", "parent_id": &parent,
+        }).expect("leer payload");
+        assert_eq!(payload.parent_id.as_deref(), Some(parent.as_str()));
+        let now = bson::DateTime::from_chrono(Utc::now());
+        let document: ApiCollectionDocument = bson::from_document(doc! {
+            "_id": ObjectId::new(), "eid": "TEST", "nombre": "Subcolección",
+            "parent_id": &parent, "timestamp": now, "updated_at": now,
+        }).expect("leer subcolección");
+        let stored = bson::to_document(&document).expect("persistir subcolección");
+        assert_eq!(stored.get_str("parent_id").expect("padre"), parent);
+        assert_eq!(document.into_record().expect("record").parent_id, Some(parent));
+    }
+
+    #[test]
     fn cifrado_es_reversible() {
         let plain = "Bearer super-secret-token";
         let encrypted = encrypt_secret(plain).expect("cifrar");
@@ -1500,6 +1635,7 @@ mod tests {
 
         // Crear una colección nueva.
         let nueva = save_api_collection(ApiCollectionPayload {
+            parent_id: None,
             id: None,
             eid: eid.to_string(),
             nombre: "Facturación".to_string(),
