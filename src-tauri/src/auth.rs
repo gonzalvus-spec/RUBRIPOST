@@ -141,14 +141,12 @@ pub struct HistorialFiltro {
 
 async fn get_usuarios() -> Result<Collection<UsuarioDocumento>, String> {
     let client = get_client().await?;
-    let db_name = std::env::var("MONGODB_DB").unwrap_or_else(|_| DEFAULT_DB.to_string());
-    Ok(client.database(&db_name).collection(USUARIOS_COLLECTION))
+    Ok(client.database(DEFAULT_DB).collection(USUARIOS_COLLECTION))
 }
 
 async fn get_historial() -> Result<Collection<Document>, String> {
     let client = get_client().await?;
-    let db_name = std::env::var("MONGODB_DB").unwrap_or_else(|_| DEFAULT_DB.to_string());
-    Ok(client.database(&db_name).collection(HISTORIAL_COLLECTION))
+    Ok(client.database(DEFAULT_DB).collection(HISTORIAL_COLLECTION))
 }
 
 /// Índices de `usuarios` e `historial` (se pueden crear varias veces sin daño).

@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { Eye, EyeOff, Info, KeyRound, Shield } from 'lucide-react';
+import { Eye, EyeOff, Info, Shield } from 'lucide-react';
 
 import { useApiStore, type AuthKind } from '../../../store/apiStore';
-import { ENV_TOKEN } from '../constants';
 import './RubriPanel.css';
 import './RubriAuthPanel.css';
 
@@ -65,18 +64,6 @@ export const RubriAuthPanel = () => {
                 >
                   {showToken ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
-                {ENV_TOKEN && (
-                  <button
-                    type="button"
-                    className="btn btn-secondary compact"
-                    onClick={() => setAuth({ kind: 'bearer', token: ENV_TOKEN })}
-                    aria-label="Cargar token desde .env"
-                    title="Cargar VITE_RUBRI_TOKEN desde .env"
-                  >
-                    <KeyRound size={14} />
-                    .env
-                  </button>
-                )}
               </div>
             </div>
 

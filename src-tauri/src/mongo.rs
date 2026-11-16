@@ -40,7 +40,9 @@ const DEFAULT_LIMIT: u32 = 100;
 const MAX_LIMIT: u32 = 500;
 const MAX_BODY_BYTES: usize = 1024 * 1024; // 1 MB
 const ENC_PREFIX: &str = "enc:v1:";
-const DEFAULT_DEV_KEY: &str = "rubrifact-dev-key-change-me";
+// Clave estable para que todas las instalaciones lean los secretos compartidos
+// sin depender de configuración externa.
+const APP_ENCRYPTION_KEY: &str = "rubrifact-dev-key-change-me-2026";
 
 /// Discriminador de documentos dentro de `api_requests`.
 const TIPO_REQUEST: &str = "request";
@@ -371,19 +373,28 @@ impl ApiRequestDocument {
 // Conexión (lazy + pool reutilizable)
 // ---------------------------------------------------------------------------
 
+/// Resuelve la URI sin exponerla en logs. El valor inyectado por el compilador
+/// tiene prioridad; en desarrollo se conserva el fallback a los archivos que
+/// carga `config.rs` (`.env` / `rubripost.env`).
+fn mongodb_uri() -> Option<String> {
+    option_env!("MONGODB_URI")
+        .map(str::trim)
+        .filter(|valor| !valor.is_empty())
+        .map(str::to_owned)
+        .or_else(|| {
+            let _ = crate::config::cargar();
+            env::var("MONGODB_URI")
+                .ok()
+                .map(|valor| valor.trim().to_string())
+                .filter(|valor| !valor.is_empty())
+        })
+}
+
 /// Devuelve el cliente MongoDB, conectándose la primera vez que se invoca.
 pub async fn get_client() -> Result<&'static Client, String> {
     MONGO_CLIENT
         .get_or_try_init(|| async {
-            // La configuración se carga al arrancar (ver `config.rs`); se
-            // reintenta aquí por si el pool se abre antes del setup.
-            let _ = crate::config::cargar();
-
-            let uri = env::var("MONGODB_URI")
-                .map(|valor| valor.trim().to_string())
-                .ok()
-                .filter(|valor| !valor.is_empty())
-                .ok_or_else(crate::config::mensaje_sin_mongo)?;
+            let uri = mongodb_uri().ok_or_else(crate::config::mensaje_sin_mongo)?;
 
             log::info!("Conectando a MongoDB (inicialización única del pool)...");
 
@@ -409,16 +420,14 @@ pub async fn get_client() -> Result<&'static Client, String> {
 
 async fn get_collection() -> Result<Collection<ApiRequestDocument>, String> {
     let client = get_client().await?;
-    let db_name = env::var("MONGODB_DB").unwrap_or_else(|_| DEFAULT_DB.to_string());
-    Ok(client.database(&db_name).collection(COLLECTION_NAME))
+    Ok(client.database(DEFAULT_DB).collection(COLLECTION_NAME))
 }
 
 /// Handle tipado para los documentos de colección. Apunta a la MISMA
 /// colección física de MongoDB que las requests.
 async fn get_collections_handle() -> Result<Collection<ApiCollectionDocument>, String> {
     let client = get_client().await?;
-    let db_name = env::var("MONGODB_DB").unwrap_or_else(|_| DEFAULT_DB.to_string());
-    Ok(client.database(&db_name).collection(COLLECTION_NAME))
+    Ok(client.database(DEFAULT_DB).collection(COLLECTION_NAME))
 }
 
 /// Migración + índices. Se ejecuta una única vez por proceso.
@@ -563,18 +572,8 @@ async fn list_collections(eid: &str) -> Result<Vec<ApiCollectionRecord>, String>
 
 fn encryption_key() -> &'static [u8; 32] {
     ENCRYPTION_KEY.get_or_init(|| {
-        let secret = env::var("RUBRIPOST_AUTH_KEY")
-            .or_else(|_| env::var("AUTH_ENCRYPTION_KEY"))
-            .unwrap_or_else(|_| {
-                log::warn!(
-                    "RUBRIPOST_AUTH_KEY no está definida: usando clave de desarrollo. \
-                     Define una clave propia en .env para producción."
-                );
-                DEFAULT_DEV_KEY.to_string()
-            });
-
         let mut hasher = Sha256::new();
-        hasher.update(secret.as_bytes());
+        hasher.update(APP_ENCRYPTION_KEY.as_bytes());
         hasher.finalize().into()
     })
 }
@@ -626,7 +625,7 @@ fn decrypt_secret(value: &str) -> Result<String, String> {
     let nonce = Nonce::from_slice(nonce_bytes);
 
     let plaintext = cipher.decrypt(nonce, ciphertext).map_err(|_| {
-        "No se pudo descifrar el secreto: ¿cambió RUBRIPOST_AUTH_KEY?".to_string()
+        "No se pudo descifrar el secreto guardado".to_string()
     })?;
 
     String::from_utf8(plaintext)

@@ -27,6 +27,9 @@ fn generar_env_embebido() {
 }
 
 fn main() {
+    // Fuerza una recompilación si GitHub Actions cambia el secreto usado por
+    // `option_env!("MONGODB_URI")`, sin imprimir su contenido.
+    println!("cargo:rerun-if-env-changed=MONGODB_URI");
     generar_env_embebido();
     tauri_build::build()
 }

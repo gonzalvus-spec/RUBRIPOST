@@ -138,14 +138,10 @@ persistencia total de requests en **MongoDB**.
 
    ```env
    MONGODB_URI=mongodb://127.0.0.1:27017
-   MONGODB_DB=rubripost_db
-   RUBRIPOST_AUTH_KEY=una-clave-larga-y-aleatoria
-   VITE_RUBRI_EID=EMP-0042
-   # VITE_RUBRI_TOKEN=...   (opcional)
    ```
 
-   > `RUBRIPOST_AUTH_KEY` es la clave maestra de cifrado. Si la cambias, los
-   > tokens ya guardados no podrán descifrarse.
+   La base `rubripost_db`, el proyecto inicial y el cifrado forman parte de la
+   configuración interna de la aplicación.
 
 3. Ejecuta en desarrollo:
 
@@ -161,9 +157,8 @@ persistencia total de requests en **MongoDB**.
 
 ### Cómo encuentra la configuración el .exe
 
-Variables: `MONGODB_URI`, `MONGODB_DB`, `VITE_RUBRI_EID` y `RUBRIPOST_AUTH_KEY`
-(ver `.env.example`). La app las busca en este orden, sin pisar las que ya estén
-definidas en el sistema:
+La única variable de conexión es `MONGODB_URI` (ver `.env.example`). La app la
+busca en este orden, sin pisar la que ya esté definida en el sistema:
 
 1. La ruta indicada en la variable `RUBRIPOST_ENV`.
 2. `rubripost.env` o `.env` **junto al ejecutable** (la carpeta del `.exe`).
@@ -198,13 +193,7 @@ local y nunca se verán entre sí.
 
    ```env
    MONGODB_URI=mongodb+srv://usuario:password@cluster.mongodb.net/
-   MONGODB_DB=rubripost_db
-   RUBRIPOST_AUTH_KEY=la-misma-clave-en-las-dos-pcs
-   VITE_RUBRI_EID=EMP-0042
    ```
-
-   > `RUBRIPOST_AUTH_KEY` debe ser idéntica en ambas PCs; si no, los tokens
-   > cifrados en una no se podrán descifrar en la otra.
 3. Abre la app en ambas. El indicador **En vivo** de la barra superior confirma
    la conexión; si falla muestra **Sin conexión** en rojo.
 
@@ -352,7 +341,7 @@ proyecto**: no depende de la request abierta, del método HTTP ni de la colecci�
 
 ### Colección MongoDB
 
-Base de datos: `MONGODB_DB` (por defecto `rubripost_db`).
+Base de datos interna: `rubripost_db`.
 Colección: `api_requests` — **una sola colección** para todo. El campo `tipo`
 distingue los dos tipos de documento.
 

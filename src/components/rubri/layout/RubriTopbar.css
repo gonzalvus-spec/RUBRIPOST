@@ -379,8 +379,9 @@
 
 .topbar-update.available:hover {
   border-color: var(--rubri-green-light);
-  background: var(--rubri-gradient-hover);
-  box-shadow: var(--rubri-glow);
+  background: var(--rubri-green-light);
+  color: #ffffff;
+  box-shadow: none;
 }
 
 .topbar-update.progress:disabled {

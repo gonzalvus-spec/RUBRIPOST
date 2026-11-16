@@ -1,9 +1,6 @@
 import { DEFAULT_COLLECTION_COLOR, type HttpMethod } from '../../store/apiStore';
 import type { ModalMode, NameModalState, ResponseLanguage } from './types';
 
-/** Token opcional que se puede precargar desde el .env. */
-export const ENV_TOKEN = import.meta.env.VITE_RUBRI_TOKEN?.trim() ?? '';
-
 export const CLOSED_MODAL: NameModalState = {
   open: false,
   mode: 'save',

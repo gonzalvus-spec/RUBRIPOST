@@ -121,8 +121,7 @@ impl ProyectoDocumento {
 // ---------------------------------------------------------------------------
 
 fn base_de_datos(client: &Client) -> mongodb::Database {
-    let nombre = std::env::var("MONGODB_DB").unwrap_or_else(|_| "rubripost_db".to_string());
-    client.database(&nombre)
+    client.database("rubripost_db")
 }
 
 async fn handle_proyectos() -> Result<Collection<ProyectoDocumento>, String> {

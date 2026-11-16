@@ -337,9 +337,7 @@ export const groupRequestsByCollection = (
 // Estado inicial
 // ---------------------------------------------------------------------------
 
-const DEFAULT_EID =
-  (import.meta.env.VITE_RUBRI_EID as string | undefined)?.trim() ||
-  'EMP-0042';
+const DEFAULT_EID = 'EMP-0042';
 
 /** Proyecto activo recordado entre sesiones (queda en este equipo). */
 export const PROYECTO_STORAGE_KEY = 'rubri.proyecto.codigo';
@@ -1496,7 +1494,7 @@ export const useApiStore = create<ApiState>()((set, get) => {
       try {
         let lista = await invoke<ApiProyecto[]>('listar_proyectos');
 
-        // Primer arranque: el proyecto activo (VITE_RUBRI_EID) necesita su
+        // Primer arranque: el proyecto principal necesita su
         // ficha para aparecer en el selector. Solo se crea cuando no hay
         // ninguno: si un proyecto se borra, no debe resucitar aquí.
         if (lista.length === 0) {
