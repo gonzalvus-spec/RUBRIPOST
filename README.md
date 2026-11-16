@@ -1,443 +1,104 @@
-# RUBRIFACT API CLIENT (RUBRIPOST)
+![RubriPost — Cliente HTTP de escritorio](assets/rubripost-banner.svg)
 
-Cliente HTTP de escritorio de **RUBRIFACT** (Rubri Systems),
-construido con **Tauri 2 + React 19 + TypeScript + Monaco Editor + Zustand** y
-persistencia total de requests en **MongoDB**.
+# RubriPost · API Client
 
-## Características
+Cliente HTTP de escritorio de **Rubrifact (Rubri Systems)** para crear, ejecutar y organizar peticiones API. Desarrollado con **Tauri 2, React 19, TypeScript, Monaco Editor y Zustand**, con datos persistidos en **MongoDB**.
 
-- **Cookies estilo Bruno, por proyecto**: las requests se envían con el cliente
-  nativo (reqwest), así que se leen y reenvían las cookies reales. Lo recibido
-  por `Set-Cookie` se guarda en la colección `cookies` de MongoDB asociado al
-  proyecto (`eid`) y al dominio —no a la request, ni al método, ni a la
-  colección—. El botón de cookies de la barra superior abre el tarro del
-  proyecto completo: crear, editar, borrar, vaciar por dominio o todo, y
-  desactivar el envío automático (se recuerda entre sesiones para cada proyecto
-  por separado). Editar o borrar una cookie también comprueba su proyecto.
-- **Multi-proyecto con CRUD**: cada proyecto es un espacio de trabajo
-  aislado (su código es el `eid` de requests, colecciones y cookies). Se crean,
-  editan y eliminan desde el selector de la barra superior: nombre, código,
-  descripción y color. Cambiar el código migra todo el contenido del proyecto y
-  el borrado puede arrastrar sus requests y cookies (o conservarlas). El
-  proyecto activo se recuerda entre sesiones.
-- **Acceso con usuarios de MongoDB**: al abrir la app hay que iniciar sesión.
-  Las contraseñas se guardan con **Argon2id** en la colección `usuarios`. Si la
-  base no tiene usuarios todavía, la misma pantalla crea el primer
-  administrador.
-- **Bitácora de cambios**: cada acción (crear, editar, renombrar, duplicar,
-  mover o eliminar requests y colecciones, además de ingresos y salidas) queda
-  registrada en `historial` con usuario, entidad, detalle y fecha/hora. Se
-  consulta desde el botón de reloj de la barra superior.
-  Cada proyecto muestra únicamente sus cambios. La vista compacta
-  agrupa por día y permite desplegar detalles, buscar por acción, nombre o detalle,
-  filtrar por usuario, tipo de elemento y período (hasta 300 cambios recientes).
-  La exportación JSON es exclusiva de colecciones y subcolecciones, no del historial.
-  Las horas se muestran en formato de 12 horas, con a. m. / p. m.
-  Los registros antiguos sin `eid` se conservan, pero no se atribuyen a un
-  proyecto arbitrariamente ni se mezclan con su historial. Al cambiar el código
-  de un proyecto también se migra el historial que ya tiene proyecto asignado.
-- **Exportación de colecciones a JSON**: el botón de descarga junto al título
-  COLECCIONES abre un selector de carpetas y subcarpetas. El archivo usa el
-  formato RubriPost, mantiene la jerarquía y el orden, e incluye todas las
-  peticiones guardadas de las carpetas elegidas, sin el límite del sidebar.
-  La autenticación y los headers sensibles se omiten por defecto; se pueden
-  incluir explícitamente. Revisa las URLs y bodies antes de compartir archivos.
-  En escritorio se abre **Guardar como** para elegir la ruta del JSON; cancelar
-  no cierra el selector de colecciones y los errores de escritura se muestran.
-- **Persistencia total**: se guardan `eid`, `nombre`, `contexto`, `metodo`, `url`,
-  `body`, `headers`, `query_descripciones`, `auth`, `http_info`, `timestamp`,
-  `updated_at` y `version`.
-- **Query params**: la pestaña Params es una tabla `Key` / `Value` / `Description`
-  sincronizada con la URL: cada edición reescribe la query (`?clave=valor`), así
-  que lo que se ve es exactamente lo que se envía y se guarda. Las filas sin
-  `Key` quedan pendientes y no viajan; las descripciones se guardan aparte en
-  `query_descripciones` porque no forman parte de la URL.
-- **Colecciones estilo Postman**: crea, renombra, duplica y elimina colecciones;
-  el botón de carpeta con `+` de cada colección crea subcolecciones anidadas.
-  Arrastra una carpeta al centro de otra para convertirla en subcolección,
-  o a sus bordes para colocarla antes/después, al mismo nivel. Para sacarla
-  al nivel principal, suéltala sobre el título **COLECCIONES**, que durante el
-  arrastre muestra **SOLTAR EN NIVEL PRINCIPAL**. No hay botones de conversión;
-  se conserva todo el contenido y no se permiten ciclos ni cambios de proyecto.
-  Arrastra una petición (GET, POST, etc.) sobre una colección o subcolección
-  para moverla, o entre peticiones para reordenarla. Mover o reordenar se aplica
-  de forma **optimista** en la UI y se persiste en segundo plano: la colección
-  aparece directamente en su posición definitiva, sin saltos ni esperas. Al
-  acercar el cursor a los bordes superior/inferior del sidebar durante un
-  arrastre, la lista se desplaza automáticamente. Duplicar o eliminar una
-  colección incluye sus subcolecciones y peticiones (con confirmación al borrar).
-  Cada request vive dentro de una colección. Todo se guarda en la **misma**
-  colección de MongoDB (`api_requests`).
-- **Upsert idempotente**: "Guardar" actualiza el documento si ya existe
-  (`lastSavedId`); si es nueva, pide el nombre y la inserta.
-- **Sincronización en vivo entre PCs**: la app consulta MongoDB cada 5 s (y al
-  recuperar el foco) y refleja al instante las colecciones y requests que otra
-  PC haya creado, editado o eliminado. Nunca pisa cambios locales sin guardar.
-- **Secrets cifrados**: tokens Bearer y API Keys se cifran con **AES-256-GCM**
-  antes de escribirse en MongoDB y se descifran al recuperarlos.
-- **Editor Monaco** con validación JSON en tiempo real, tema Rubrifact y
-  empaquetado local (sin CDN, funciona offline).
-- **Interfaz estilo Postman**: barra superior con pestañas de requests abiertas,
-  sidebar plano con métodos coloreados, breadcrumb colección › request, barra de
-  URL con los botones Guardar y Enviar integrados, tabs horizontales
-  (Params/Body/Auth/Headers) y barra de estado inferior. Paleta Rubrifact (verde
-  esmeralda + dorado).
-- **Overview del workspace**: al abrir el programa se muestra la vista Overview
-  del proyecto activo con contadores de Collections, Requests y Environments,
-  Quick Actions y el listado jerárquico de colecciones, ocupando todo el ancho.
-  La pestaña Overview se oculta al abrir cualquier request y reaparece
-  automáticamente al cerrar la última pestaña de request.
-- **Chat por request**: cada request tiene un panel lateral derecho de notas
-  asociado a ella. Se puede contraer a un riel estrecho para liberar espacio;
-  ese estado se recuerda por usuario. Las notas se guardan por usuario y
-  proyecto en este equipo, y solo su autor puede editarlas o eliminarlas. Las
-  acciones aparecen al pasar el ratón sobre el mensaje propio, agrupadas en un
-  menú **⋯** con *Editar* y *Eliminar*; eliminar pide confirmación con
-  SweetAlert2 antes de borrar la nota.
-- **Sidebar** con árbol de colecciones, buscador, contador por colección,
-  nombre de request, método, duplicar, renombrar (lápiz) y eliminar con
-  confirmación.
-  El menú **⋯** de cada carpeta aparece al pasar el ratón y contiene, en este
-  orden: Nueva subcolección, Nueva request, Editar, Duplicar y Eliminar.
-  **Editar** permite cambiar el nombre y el color de la carpeta.
-  Una carpeta con subcolecciones no se muestra como vacía aunque no tenga
-  requests directas.
-  El estado abierto/cerrado se recuerda en este equipo por usuario y proyecto.
-  Solo cambia al abrir/cerrar manualmente: ni arrastrar carpetas/peticiones, ni crear
-  subcolecciones, ni buscar abre automáticamente una carpeta cerrada.
-- **Arranque rápido**: se muestra inmediatamente la última lista local de
-  colecciones del usuario/proyecto y se sincroniza con MongoDB en segundo plano.
-  La caché solo guarda metadatos de carpetas, nunca peticiones ni credenciales.
-  El editor JSON se carga por separado y ya no bloquea la interfaz inicial.
-  La primera carga sin caché depende de la conexión; mientras se actualiza se
-  indica «Caché local», sin presentar peticiones pendientes como carpetas vacías.
-- **Dirty state**: punto dorado y badge "Sin guardar" cuando hay cambios.
-- **Alertas SweetAlert2** con el diseño de la empresa para confirmaciones,
-  éxitos y errores.
-- **Atajos**: `Ctrl+S` guardar · `Ctrl+Enter` enviar · `Ctrl+R` refrescar.
-- **Límite de 1 MB** para el body (validado en frontend y backend).
-- **GET** nunca persiste body.
-- **Índices MongoDB** `{ eid, tipo, timestamp }` y
-  `{ eid, tipo, coleccion_id, timestamp }` creados automáticamente.
+## Funcionalidades
+
+- **Peticiones HTTP:** editor JSON, parámetros, headers, autenticación y visualización de respuestas.
+- **Proyectos y colecciones:** espacios independientes, subcolecciones, búsqueda, duplicación y organización mediante arrastrar y soltar.
+- **Persistencia y sincronización:** requests y colecciones en MongoDB; actualización entre equipos cada **5 segundos** y al recuperar el foco.
+- **Cookies por proyecto:** gestión por dominio y envío automático a través del cliente nativo de Rust (`reqwest`).
+- **Seguridad:** inicio de sesión con contraseñas **Argon2id** y cifrado **AES-256-GCM** para tokens y API Keys almacenados.
+- **Historial:** registro de acciones por usuario y proyecto, con filtros.
+- **Exportación JSON:** colecciones y subcolecciones, excluyendo credenciales sensibles de forma predeterminada.
+- **Interfaz:** pestañas de requests, vista general del proyecto, panel de notas por petición y avisos de cambios sin guardar.
+- **Actualizaciones:** comprobación e instalación de versiones publicadas mediante GitHub Releases.
 
 ## Requisitos
 
-- Node.js 20+
-- Rust 1.85+ (edición 2024)
-- MongoDB 6+ local o MongoDB Atlas
+- **Node.js 20+**
+- **Rust 1.85+**
+- **MongoDB 6+** o **MongoDB Atlas**
 
-## Configuración
+## Instalación y ejecución
 
-1. Instala dependencias:
+```bash
+npm install
+```
 
-   ```bash
-   npm install
-   ```
+Copia `.env.example` como `.env` y configura la conexión:
 
-2. Copia `.env.example` a `.env` y completa los valores:
+```env
+MONGODB_URI=mongodb://127.0.0.1:27017
+```
 
-   ```env
-   MONGODB_URI=mongodb://127.0.0.1:27017
-   ```
+Inicia la aplicación en desarrollo:
 
-   La base `rubripost_db`, el proyecto inicial y el cifrado forman parte de la
-   configuración interna de la aplicación.
+```bash
+npm run tauri dev
+```
 
-3. Ejecuta en desarrollo:
+Genera el ejecutable:
 
-   ```bash
-   npm run tauri dev
-   ```
+```bash
+npm run tauri build
+```
 
-4. Build de producción:
+> **Primer acceso:** si la base de datos aún no tiene usuarios, la pantalla de inicio de sesión permite crear el primer administrador.
 
-   ```bash
-   npm run tauri build
-   ```
+## Uso en varios equipos
 
-### Cómo encuentra la configuración el .exe
+Para compartir proyectos y peticiones, todas las instalaciones deben conectarse a **la misma base de datos MongoDB** (por ejemplo, MongoDB Atlas). `127.0.0.1` apunta a la base local de cada equipo y **no** permite compartir datos entre distintas PCs.
 
-La única variable de conexión es `MONGODB_URI` (ver `.env.example`). La app la
-busca en este orden, sin pisar la que ya esté definida en el sistema:
+La aplicación sincroniza los datos cada **5 segundos** y conserva los cambios locales que aún no se han guardado.
 
-1. La ruta indicada en la variable `RUBRIPOST_ENV`.
-2. `rubripost.env` o `.env` **junto al ejecutable** (la carpeta del `.exe`).
-3. `resources/rubripost.env` junto al ejecutable (instaladores/macOS).
-4. `%APPDATA%\com.gonza.rubripost\rubripost.env` (Linux/macOS:
-   `~/.config/com.gonza.rubripost/rubripost.env`).
-5. `.env` del directorio actual o de sus padres (desarrollo).
-6. Respaldo **embebido en el binario**: `build.rs` copia el `.env` de la raíz al
-   compilar, así el `.exe` conecta a MongoDB aunque el instalador no copie
-   ningún archivo.
+## Configuración del ejecutable
 
-Por eso, para que la build empaquetada se conecte, compila con el `.env`
-presente (`npm run tauri build`). Si más adelante cambias de base de datos sin
-recompilar, deja un `rubripost.env` junto al `.exe` (o en la carpeta de
-configuración del usuario) con las nuevas variables: tiene prioridad sobre el
-respaldo embebido. El registro de la app (`RUST_LOG=info`) indica de qué archivo
-se cargó la configuración.
+La variable principal es `MONGODB_URI`. En la versión compilada, puedes cambiar la conexión sin recompilar colocando un archivo `rubripost.env` junto al `.exe`:
 
-## Uso simultáneo en 2 PCs
+```env
+MONGODB_URI=mongodb+srv://USUARIO:CONTRASENA@CLUSTER.mongodb.net/
+```
 
-La app **siempre escribe en MongoDB**; para que dos PCs vean los mismos cambios
-ambas deben apuntar a la **misma base de datos compartida**. Con
-`MONGODB_URI=mongodb://127.0.0.1:27017` cada PC guarda en su propio MongoDB
-local y nunca se verán entre sí.
-
-1. Elige un MongoDB compartido:
-   - **MongoDB Atlas** (recomendado): `mongodb+srv://...` accesible desde
-     cualquier red.
-   - **Servidor LAN**: en la PC servidor arranca `mongod --bind_ip 0.0.0.0` y
-     usa `mongodb://192.168.x.x:27017` desde ambas PCs (abre el puerto 27017).
-2. Copia el **mismo** `.env` en las dos PCs:
-
-   ```env
-   MONGODB_URI=mongodb+srv://usuario:password@cluster.mongodb.net/
-   ```
-3. Abre la app en ambas. El indicador **En vivo** de la barra superior confirma
-   la conexión; si falla muestra **Sin conexión** en rojo.
-
-La sincronización consulta MongoDB cada **5 segundos** y al recuperar el foco de
-la ventana. Si una request abierta cambió en la otra PC y aquí no hay cambios sin
-guardar, se recarga automáticamente. Si hay ediciones locales, se conservan y
-gana el último guardado (control de versión por `version`).
-
-## Acceso y bitácora
-
-La app pide usuario y contraseña contra MongoDB antes de mostrar el cliente:
-
-1. **Primer arranque** (colección `usuarios` vacía): la pantalla de login pide
-   usuario, nombre y contraseña para crear el **primer administrador**.
-2. **A partir de ahí**: quien tenga rol `admin` puede crear más usuarios desde
-   el botón **Nuevo usuario** del historial (se pide su propia contraseña como
-   confirmación).
-3. El nombre del usuario activo y el botón para cerrar sesión están en la
-   esquina superior derecha.
-
-### Colecciones de MongoDB
-
-| Colección | Contenido |
-| --- | --- |
-| `usuarios` | `usuario` (único, minúsculas), `nombre`, `password_hash` (Argon2id), `rol`, `activo`, `creado_en`, `ultimo_acceso`. |
-| `historial` | `usuario`, `accion`, `entidad` (`request`/`collection`/`proyecto`/`usuario`/`sesion`), `entidad_id`, `nombre`, `detalle`, `fecha`. |
-| `proyectos` | `codigo` (único, es el `eid`), `nombre`, `descripcion`, `color`, `timestamp`, `updated_at`. |
-| `cookies` | Tarro por proyecto y dominio: `eid`, `dominio`, `nombre`, `valor`, `ruta`, `expira`, `seguro`, `http_only`. |
-
-La fecha y hora de cada entrada del historial las genera el backend (UTC), no el
-navegador.
-
-## Proyectos
-
-La app trabaja con varios **proyectos** dentro de la misma base de datos. Cada
-proyecto guarda su propio tarro de cookies, sus colecciones y sus requests: todo
-se filtra por el `eid`, que es el código del proyecto.
-
-- El **selector de la barra superior** muestra el proyecto activo (nombre,
-  código y color) y permite cambiar con un clic, buscar entre proyectos, ver
-  cuántas requests y colecciones tiene cada uno, crear uno nuevo o abrir la
-  gestión.
-- **Gestión de proyectos** (botón *Gestionar*): alta y edición de nombre,
-  código, descripción y color, y borrado con dos modos — *Solo proyecto* (deja
-  el contenido en MongoDB) o *Con contenido* (elimina además requests y
-  cookies). Nunca se puede quedar sin proyectos: el último no se puede borrar.
-- **Cambiar el código** de un proyecto migra en el acto sus requests y cookies
-  al nuevo `eid`, así que renombrar `EMP-0042` a `EMP-2026` no pierde datos.
-- En el primer arranque (cuando todavía no hay ningún proyecto), los `eid` que
-  ya existan en `api_requests` o `cookies` se adoptan como proyectos, de forma
-  que los datos anteriores aparecen sin migración manual. El proyecto activo se
-  guarda en el equipo y se restaura al abrir la app.
-- Cada cambio de proyecto queda en la bitácora (`historial`) con la entidad
-  `proyecto`.
-
-### Colecciones
-
-Además del CRUD desde el sidebar, el selector de colección de la request es un
-menú propio (no el `<select>` del sistema): muestra el color y el contador de
-requests de cada colección, permite buscar cuando hay muchas y ofrece **Nueva
-colección** sin salir de la request. Se cierra con Escape o al hacer clic fuera.
-
-## Cookies
-
-Igual que en Bruno, la app mantiene un tarro de cookies, pero **a nivel de
-proyecto**: no depende de la request abierta, del método HTTP ni de la colección.
-
-- Las requests se ejecutan **de forma nativa** (`reqwest`), no con el `fetch`
-  del webview. Eso permite enviar la cabecera `Cookie` y leer `Set-Cookie`,
-  cosas que el navegador bloquea, y de paso elimina los problemas de CORS.
-- Cada cookie se guarda en la colección `cookies` de MongoDB con
-  `eid`, `dominio`, `nombre`, `valor`, `ruta`, `expira`, `seguro` y `http_only`.
-  La clave lógica es `proyecto + dominio + nombre + ruta`, así que dos requests
-  del mismo dominio comparten la misma sesión, y una cookie `Domain=.ejemplo.com`
-  se envía también a sus subdominios.
-- El envío automático filtra por el **dominio y la ruta de la URL** de cada
-  request (comportamiento de navegador): cualquier request del proyecto que
-  apunte a ese dominio manda sus cookies, sin que importe en qué colección esté
-  guardada ni qué método use.
-- El botón **Cookies** de la barra superior abre el tarro del proyecto. Ahí se
-  ven todas las cookies agrupadas por dominio, se buscan por dominio, nombre o
-  valor, se crean a mano (dominio, nombre, valor, ruta y expiración), se editan,
-  se borran una por una, se vacía un dominio (y sus subdominios) o el tarro
-  completo. El interruptor **Enviar cookies** desactiva el envío automático sin
-  borrar nada y se recuerda en la siguiente apertura.
-- Cuando el servidor devuelve `Set-Cookie`, la cookie se guarda y el tarro se
-  refresca automáticamente después de cada envío. Las cookies con
-  `Max-Age`/`Expires` vencidas se eliminan.
+También se admite `RUBRIPOST_ENV` para indicar una ruta de configuración. El build puede incluir una configuración de respaldo; **evita incorporar credenciales de producción en el binario**.
 
 ## Arquitectura
 
-| Archivo | Responsabilidad |
+| Capa | Tecnologías / componentes |
 | --- | --- |
-| `src-tauri/src/http.rs` | Envío nativo de requests (reqwest) con tarro de cookies en MongoDB: `enviar_request`, `listar_cookies`, `guardar_cookie`, `eliminar_cookie`, `limpiar_cookies`. |
-| `src-tauri/src/proyectos.rs` | CRUD de proyectos (colección `proyectos`): listado con adopción de `eid`, alta/edición con migración de código y borrado opcional en cascada. |
-| `src-tauri/src/auth.rs` | Login con Argon2id, alta de usuarios y bitácora de cambios (`usuarios` e `historial`). |
-| `src-tauri/src/mongo.rs` | Conexión lazy (pool reutilizable), índices, migración, cifrado AES-256-GCM y comandos Tauri de requests y colecciones. |
-| `src-tauri/src/config.rs` | Resolución de la configuración (`.env`, `rubripost.env` junto al `.exe`, carpeta de usuario y respaldo embebido). |
-| `src-tauri/src/lib.rs` | Carga de la configuración, logging y registro de comandos en `tauri::Builder`. |
-| `src-tauri/src/main.rs` | Punto de entrada del binario (`rubripost_lib::run()`). |
-| `src/store/authStore.ts` | Sesión activa (usuario, rol), login, alta de usuarios y cierre de sesión. |
-| `src/lib/httpClient.ts` | Cliente HTTP de la UI: usa los comandos nativos y cae a `fetch` cuando corre en el navegador. |
-| `src/components/cookies/RubriCookiesModal.tsx` | Tarro de cookies del proyecto: listado por dominio, alta/edición, borrado, vaciado y envío automático. |
-| `src/lib/audit.ts` | Envía a MongoDB el registro de cada cambio junto al usuario autenticado. |
-| `src/components/auth/` | Pantalla de acceso y creación del primer administrador. |
-| `src/components/proyectos/RubriProyectosModal.tsx` | Gestión de proyectos: listado, alta, edición, borrado con o sin contenido. |
-| `src/components/historial/` | Modal con la bitácora (filtro por usuario, alta de usuarios para admin). |
-| `src/store/apiStore.ts` | Estado global Zustand, dirty state, CRUD contra MongoDB y sincronización en vivo (sondeo cada 5 s). |
-| `src/App.tsx` | Shell de la aplicación: monta la vista del cliente HTTP. |
-| `src/components/rubri/RubriApiView.tsx` | Orquestador de la vista: estado compartido, handlers, atajos y composición de módulos. |
-| `src/components/rubri/layout/` | `RubriTopbar`, `RubriProyectoSwitcher` (selector de proyecto), `RubriSidebar` (árbol, búsqueda y drag & drop), `RubriStatusBar` y `RubrifactLogo`, cada uno con su `.css`. |
-| `src/components/rubri/request/` | `RubriRequestHeader` (breadcrumb), `RubriCollectionMenu` (selector de colección propio), `RubriRequestBar` (método + URL + acciones), `RubriRequestTabs` (Params / Body / Auth / Headers) y `RequestChatPanel` (notas contraíbles de la request). |
-| `src/components/rubri/panels/` | `RubriQueryPanel` (query params), `RubriBodyPanel` (Monaco), `RubriAuthPanel`, `RubriHeadersPanel`, `RubriResponsePanel` y `RubriPanel.css` (estructura común de panel). |
-| `src/lib/queryParams.ts` | Lectura y reescritura de la query de la URL (`splitQuery`, `urlWithQuery`), fuente de verdad de la pestaña Params. |
-| `src/lib/chatNotes.ts` | Persistencia local de las notas de cada request por usuario y proyecto, con validación de autoría para editar/eliminar y migración del borrador al guardar. |
-| `src/lib/chatPreferences.ts` | Estado contraído/expandido del chat recordado por usuario. |
-| `src/components/rubri/modal/` | `RubriNameModal`: guardar y renombrar requests y colecciones. |
-| `src/components/rubri/constants.ts` · `types.ts` | Constantes (tokens, métodos, textos del modal) y tipos compartidos de la vista. |
-| `src/components/common/ResponseViewer.tsx` | Visor de respuesta con resaltado raw / JSON / XML. |
-| `src/lib/alerts.ts` | Capa de alertas SweetAlert2 con el tema Rubrifact (toasts y confirmaciones). |
-| `src/lib/monacoSetup.ts` | Workers locales de Monaco + tema `rubrifact-dark`. |
-| `src/App.css` | Design system Rubrifact (tokens, base, botones e iconos, colores por método HTTP). |
+| Interfaz | React 19, TypeScript, Monaco Editor |
+| Estado | Zustand |
+| Escritorio y HTTP | Tauri 2, Rust, `reqwest` |
+| Base de datos | MongoDB (`rubripost_db`) |
+| Seguridad | Argon2id, AES-256-GCM |
 
-### Comandos Tauri
+La colección `api_requests` almacena tanto peticiones como carpetas (diferenciadas por `tipo`). Las colecciones `proyectos`, `usuarios`, `historial` y `cookies` gestionan el resto de la información.
 
-| Comando | Descripción |
+## Atajos
+
+| Acción | Atajo |
 | --- | --- |
-| `get_api_workspace(filter)` | Devuelve colecciones + requests del `eid` en una sola instantánea. |
-| `save_api_request_full(payload)` | Inserta o actualiza (upsert por `_id`). Devuelve el `_id`. |
-| `get_api_requests_full(filter)` | Lista documentos completos por `eid` (máx. 500). |
-| `delete_api_request(id)` | Elimina por `_id`. |
-| `duplicate_api_request(id)` | Duplica añadiendo `" (copia)"`. Devuelve el nuevo `_id`. |
-| `save_api_collection(payload)` | Crea o renombra una colección. Devuelve el `_id`. |
-| `delete_api_collection(payload)` | Elimina la colección y, por defecto, sus requests (`delete_requests`). |
-| `duplicate_api_collection(id)` | Copia la colección con todas sus requests. |
-| `move_api_request(payload)` | Mueve una request a otra colección (`id`, `coleccion_id`). |
-| `listar_proyectos()` | Proyectos con sus conteos; adopta los `eid` que ya existen en los datos. |
-| `guardar_proyecto(payload)` | Crea o edita un proyecto (`id`, `codigo`, `nombre`, `descripcion`, `color`); al cambiar `codigo` migra el contenido. |
-| `eliminar_proyecto(payload)` | Elimina un proyecto y, con `cascada`, sus requests y cookies. |
-| `enviar_request(payload)` | Ejecuta la request en Rust (sin CORS) enviando las cookies del dominio y guardando las de `Set-Cookie`. |
-| `listar_cookies(payload)` | Cookies del proyecto; con `url` solo las que aplican a ese dominio. |
-| `guardar_cookie(payload)` | Crea o edita una cookie del proyecto (dominio, nombre, valor, ruta, expiración). |
-| `eliminar_cookie(payload)` | Elimina una cookie por `id`. |
-| `limpiar_cookies(payload)` | Vacía el tarro del proyecto, o solo el de un dominio con `dominio`. |
-
-### Colección MongoDB
-
-Base de datos interna: `rubripost_db`.
-Colección: `api_requests` — **una sola colección** para todo. El campo `tipo`
-distingue los dos tipos de documento.
-
-**Request** (`tipo: "request"`):
-
-```json
-{
-  "_id": "ObjectId",
-  "tipo": "request",
-  "eid": "EMP-0042",
-  "nombre": "Buscar XML Factura 1300",
-  "contexto": "Extracción XML",
-  "metodo": "POST",
-  "url": "",
-  "body": "{ \"numero\": \"1300\" }",
-  "headers": { "Content-Type": "application/json" },
-  "query_descripciones": { "numero": "Número de factura" },
-  "auth": { "kind": "bearer", "token": "enc:v1:..." },
-  "http_info": { "status_code": 200, "duration_ms": 321 },
-  "coleccion_id": "6ae7b3dcf0338c09dabaddc7",
-  "timestamp": "ISODate",
-  "updated_at": "ISODate",
-  "version": 3
-}
-```
-
-**Colección** (`tipo: "collection"`):
-
-```json
-{
-  "_id": "ObjectId",
-  "tipo": "collection",
-  "eid": "EMP-0042",
-  "nombre": "Facturación SUNAT",
-  "color": "#C5A059",
-  "orden": 0,
-  "timestamp": "ISODate",
-  "updated_at": "ISODate"
-}
-```
-
-> **Migración automática**: los documentos antiguos sin `tipo` se marcan como
-> `request` y las requests sin `coleccion_id` se adoptan en la primera colección
-> del EID (se crea `General` si no existe). Así nunca queda un "historial"
-> separado de las colecciones.
-
-### Colección `proyectos`
-
-```json
-{
-  "_id": "ObjectId",
-  "codigo": "EMP-0042",
-  "nombre": "RUBRIFACT Producción",
-  "descripcion": "API de facturación",
-  "color": "#0A8F4E",
-  "timestamp": "ISODate",
-  "updated_at": "ISODate"
-}
-```
-
-`codigo` es único (índice `codigo_unico`) y es el `eid` que usan `api_requests`
-y `cookies`.
+| Guardar | `Ctrl + S` |
+| Enviar petición | `Ctrl + Enter` |
+| Actualizar | `Ctrl + R` |
 
 ## Pruebas
 
 ```bash
-# Unitarias (cifrado y límites) + integración con MongoDB local
 cd src-tauri
 cargo test --lib
+```
+
+Para ejecutar las pruebas de integración que requieren MongoDB local:
+
+```bash
 cargo test --lib -- --ignored --nocapture
 ```
 
-## Nota sobre CORS
+## Publicación de actualizaciones
 
-Las peticiones se ejecutan en Rust con `reqwest`, por lo que **no** aplican las
-restricciones CORS del webview: cualquier API responde igual que desde `curl`.
-En el navegador (solo desarrollo web) se usa `fetch` como respaldo, con las
-limitaciones normales de CORS y sin cookies reales.
+Actualiza la versión en `package.json`, `src-tauri/Cargo.toml` y `src-tauri/tauri.conf.json`; crea y publica un tag `vX.Y.Z`. El workflow `.github/workflows/release.yml` genera el release firmado si están configurados los secretos `TAURI_SIGNING_PRIVATE_KEY` y `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
 
-## Actualizaciones automáticas (estilo Discord)
-
-La app puede actualizarse sola desde GitHub Releases:
-
-- En la barra superior hay un botón de descarga **Buscar actualizaciones**.
-- Al arrancar, la app también comprueba en silencio si hay una versión nueva.
-- Si la hay, se muestra un diálogo: al confirmar, se descarga el instalador firmado, se instala y la app se reinicia.
-
-### Publicar una versión
-
-1. Sube la versión en `package.json`, `src-tauri/Cargo.toml` y `src-tauri/tauri.conf.json`.
-2. Haz commit y crea el tag (`git tag v0.2.0` y `git push origin v0.2.0`).
-3. El workflow Release (`.github/workflows/release.yml`) compila, firma y publica el release en GitHub con `latest.json` incluido.
-
-### Requisitos en GitHub
-
-- Secret `TAURI_SIGNING_PRIVATE_KEY`: contenido completo de `%USERPROFILE%\.tauri\rubripost.key` (la clave nunca se sube al repo).
-- Secret `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: contraseña elegida al generar la clave.
-- La clave pública ya está en `tauri.conf.json`; la privada firma cada release.
-- Las instalaciones anteriores a este cambio no incluyen el updater: deberán instalarse una vez manualmente.
+> **Nota:** en la app de escritorio las peticiones usan Rust (`reqwest`) y no están sujetas al CORS del navegador. El modo web de desarrollo usa `fetch` y sí mantiene esas restricciones.
