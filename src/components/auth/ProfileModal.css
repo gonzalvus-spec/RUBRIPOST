@@ -1,0 +1,57 @@
+.profile-modal {
+  max-width: 520px;
+}
+
+.profile-modal .modal-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-modal .modal-header h2 svg {
+  color: var(--rubri-gold);
+}
+
+.profile-grid,
+.profile-password-fields {
+  display: grid;
+  gap: 12px;
+}
+
+.profile-grid label,
+.profile-password-fields label {
+  display: grid;
+  gap: 6px;
+}
+
+.profile-grid label span,
+.profile-password-fields label span {
+  color: var(--rubri-text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.profile-password-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--rubri-border);
+  border-radius: 7px;
+  background: var(--rubri-bg-input);
+  color: var(--rubri-text-primary);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.profile-password-toggle:hover {
+  border-color: var(--rubri-green-light);
+}
+
+.profile-error {
+  margin: 0;
+  color: #ff8a8a;
+  font-size: 0.76rem;
+}

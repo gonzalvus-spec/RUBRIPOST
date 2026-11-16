@@ -203,7 +203,13 @@
 }
 
 .request-chat-message.is-own {
-  border-color: rgba(197, 160, 89, 0.22);
+  margin-left: 18px;
+  border-color: rgba(10, 143, 78, 0.42);
+  background: rgba(10, 143, 78, 0.1);
+}
+
+.request-chat-message:not(.is-own) {
+  margin-right: 18px;
 }
 
 .request-chat-message strong {

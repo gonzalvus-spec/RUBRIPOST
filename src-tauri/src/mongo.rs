@@ -20,10 +20,10 @@ use std::env;
 
 use aes_gcm::aead::{Aead, AeadCore, KeyInit, OsRng};
 use aes_gcm::{Aes256Gcm, Nonce};
-use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use chrono::{DateTime, Utc};
-use mongodb::bson::{doc, oid::ObjectId, Document};
+use mongodb::bson::{Document, doc, oid::ObjectId};
 use mongodb::{Client, Collection, IndexModel};
 use once_cell::sync::OnceCell as SyncOnceCell;
 use serde::{Deserialize, Serialize};
@@ -624,9 +624,9 @@ fn decrypt_secret(value: &str) -> Result<String, String> {
         .map_err(|error| format!("Clave de cifrado inválida: {error}"))?;
     let nonce = Nonce::from_slice(nonce_bytes);
 
-    let plaintext = cipher.decrypt(nonce, ciphertext).map_err(|_| {
-        "No se pudo descifrar el secreto guardado".to_string()
-    })?;
+    let plaintext = cipher
+        .decrypt(nonce, ciphertext)
+        .map_err(|_| "No se pudo descifrar el secreto guardado".to_string())?;
 
     String::from_utf8(plaintext)
         .map_err(|error| format!("Secreto descifrado no es UTF-8 válido: {error}"))
@@ -637,7 +637,11 @@ fn encrypt_auth(auth: AuthConfig) -> Result<AuthConfig, String> {
         kind: auth.kind,
         token: auth.token.as_deref().map(encrypt_secret).transpose()?,
         api_key_name: auth.api_key_name,
-        api_key_value: auth.api_key_value.as_deref().map(encrypt_secret).transpose()?,
+        api_key_value: auth
+            .api_key_value
+            .as_deref()
+            .map(encrypt_secret)
+            .transpose()?,
     })
 }
 
@@ -646,7 +650,11 @@ fn decrypt_auth(auth: AuthConfig) -> Result<AuthConfig, String> {
         kind: auth.kind,
         token: auth.token.as_deref().map(decrypt_secret).transpose()?,
         api_key_name: auth.api_key_name,
-        api_key_value: auth.api_key_value.as_deref().map(decrypt_secret).transpose()?,
+        api_key_value: auth
+            .api_key_value
+            .as_deref()
+            .map(decrypt_secret)
+            .transpose()?,
     })
 }
 
@@ -883,12 +891,19 @@ async fn fetch_requests(
 pub async fn get_api_workspace_snapshot(filter: ApiRequestFilter) -> Result<ApiWorkspace, String> {
     let handle = get_collection().await?;
     ensure_indexes(&handle).await?;
-    let limit = if filter.limit == 0 { DEFAULT_LIMIT } else { filter.limit.min(MAX_LIMIT) } as i64;
+    let limit = if filter.limit == 0 {
+        DEFAULT_LIMIT
+    } else {
+        filter.limit.min(MAX_LIMIT)
+    } as i64;
     let (collections, requests) = tokio::try_join!(
         list_collections(&filter.eid),
         fetch_requests(&handle, &filter.eid, limit),
     )?;
-    Ok(ApiWorkspace { collections, requests })
+    Ok(ApiWorkspace {
+        collections,
+        requests,
+    })
 }
 
 /// Instantánea completa del workspace: colecciones + requests del EID.
@@ -932,28 +947,43 @@ pub struct ExportCollectionsPayload {
 
 /// Exporta todas las peticiones seleccionadas, sin el límite de la vista lateral.
 #[tauri::command]
-pub async fn export_api_collections(payload: ExportCollectionsPayload) -> Result<ApiWorkspace, String> {
+pub async fn export_api_collections(
+    payload: ExportCollectionsPayload,
+) -> Result<ApiWorkspace, String> {
     if payload.ids.is_empty() {
         return Err("Selecciona al menos una colección".to_string());
     }
     let selected: std::collections::HashSet<String> = payload.ids.into_iter().collect();
-    let collections: Vec<_> = list_collections(&payload.eid).await?.into_iter()
-        .filter(|item| selected.contains(&item.id)).collect();
+    let collections: Vec<_> = list_collections(&payload.eid)
+        .await?
+        .into_iter()
+        .filter(|item| selected.contains(&item.id))
+        .collect();
     if collections.len() != selected.len() {
-        return Err("Alguna colección ya no existe en este proyecto. Actualiza la lista.".to_string());
+        return Err(
+            "Alguna colección ya no existe en este proyecto. Actualiza la lista.".to_string(),
+        );
     }
     let handle = get_collection().await?;
-    let mut cursor = handle.find(doc! {
-        "eid": &payload.eid, "tipo": TIPO_REQUEST,
-        "coleccion_id": { "$in": selected.into_iter().collect::<Vec<_>>() },
-    }).sort(doc! { "orden": 1, "timestamp": -1 }).await
+    let mut cursor = handle
+        .find(doc! {
+            "eid": &payload.eid, "tipo": TIPO_REQUEST,
+            "coleccion_id": { "$in": selected.into_iter().collect::<Vec<_>>() },
+        })
+        .sort(doc! { "orden": 1, "timestamp": -1 })
+        .await
         .map_err(|error| format!("No se pudieron exportar las peticiones: {error}"))?;
     let mut requests = Vec::new();
     while cursor.advance().await.map_err(|error| error.to_string())? {
-        let document = cursor.deserialize_current().map_err(|error| error.to_string())?;
+        let document = cursor
+            .deserialize_current()
+            .map_err(|error| error.to_string())?;
         requests.push(document.into_record()?);
     }
-    Ok(ApiWorkspace { collections, requests })
+    Ok(ApiWorkspace {
+        collections,
+        requests,
+    })
 }
 
 /// Crea o actualiza una colección. Devuelve su `_id` hexadecimal.
@@ -973,8 +1003,12 @@ pub async fn save_api_collection(payload: ApiCollectionPayload) -> Result<String
     let now = Utc::now();
     let eid = payload.eid.trim().to_string();
     let nombre = payload.nombre.trim().to_string();
-    let parent_id = payload.parent_id.as_deref().map(str::trim)
-        .filter(|id| !id.is_empty()).map(str::to_string);
+    let parent_id = payload
+        .parent_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .map(str::to_string);
     if let Some(parent) = &parent_id {
         let mut next = Some(parent.clone());
         let mut visited = std::collections::HashSet::new();
@@ -982,9 +1016,12 @@ pub async fn save_api_collection(payload: ApiCollectionPayload) -> Result<String
             if payload.id.as_deref() == Some(id.as_str()) || !visited.insert(id.clone()) {
                 return Err("Una colección no puede estar dentro de sí misma".to_string());
             }
-            let ancestor = handle.find_one(doc! {
-                "_id": parse_id(&id)?, "eid": &eid, "tipo": TIPO_COLLECTION
-            }).await.map_err(|error| format!("Error al validar la colección padre: {error}"))?
+            let ancestor = handle
+                .find_one(doc! {
+                    "_id": parse_id(&id)?, "eid": &eid, "tipo": TIPO_COLLECTION
+                })
+                .await
+                .map_err(|error| format!("Error al validar la colección padre: {error}"))?
                 .ok_or_else(|| "La colección padre no existe en este proyecto".to_string())?;
             next = ancestor.parent_id;
         }
@@ -1068,14 +1105,22 @@ pub struct MoveCollectionPayload {
 #[tauri::command]
 pub async fn move_api_collection(payload: MoveCollectionPayload) -> Result<(), String> {
     let handle = get_collections_handle().await?;
-    let source = handle.find_one(doc! {
-        "_id": parse_id(&payload.id)?, "eid": &payload.eid, "tipo": TIPO_COLLECTION,
-    }).await.map_err(|error| error.to_string())?
+    let source = handle
+        .find_one(doc! {
+            "_id": parse_id(&payload.id)?, "eid": &payload.eid, "tipo": TIPO_COLLECTION,
+        })
+        .await
+        .map_err(|error| error.to_string())?
         .ok_or_else(|| "La colección no existe en este proyecto".to_string())?;
     save_api_collection(ApiCollectionPayload {
-        id: Some(payload.id), eid: source.eid, nombre: source.nombre,
-        color: Some(source.color), orden: Some(source.orden), parent_id: payload.parent_id,
-    }).await?;
+        id: Some(payload.id),
+        eid: source.eid,
+        nombre: source.nombre,
+        color: Some(source.color),
+        orden: Some(source.orden),
+        parent_id: payload.parent_id,
+    })
+    .await?;
     Ok(())
 }
 
@@ -1120,19 +1165,26 @@ pub async fn reorder_api_collections(payload: ReorderCollectionsPayload) -> Resu
 /// Lee el árbol completo antes de modificarlo (sin recursión asíncrona).
 async fn collection_subtree(id: &str) -> Result<Vec<ApiCollectionDocument>, String> {
     let handle = get_collections_handle().await?;
-    let root = handle.find_one(doc! { "_id": parse_id(id)?, "tipo": TIPO_COLLECTION })
-        .await.map_err(|error| format!("Error al buscar la colección: {error}"))?
+    let root = handle
+        .find_one(doc! { "_id": parse_id(id)?, "tipo": TIPO_COLLECTION })
+        .await
+        .map_err(|error| format!("Error al buscar la colección: {error}"))?
         .ok_or_else(|| "La colección no existe o ya fue eliminada".to_string())?;
     let mut tree = vec![root];
     let mut visited = std::collections::HashSet::from([id.to_string()]);
     let mut index = 0;
     while index < tree.len() {
         let parent = tree[index].id.ok_or("Colección sin _id")?.to_hex();
-        let mut cursor = handle.find(doc! {
-            "tipo": TIPO_COLLECTION, "eid": &tree[0].eid, "parent_id": parent
-        }).await.map_err(|error| format!("Error al leer subcolecciones: {error}"))?;
+        let mut cursor = handle
+            .find(doc! {
+                "tipo": TIPO_COLLECTION, "eid": &tree[0].eid, "parent_id": parent
+            })
+            .await
+            .map_err(|error| format!("Error al leer subcolecciones: {error}"))?;
         while cursor.advance().await.map_err(|error| error.to_string())? {
-            let child = cursor.deserialize_current().map_err(|error| error.to_string())?;
+            let child = cursor
+                .deserialize_current()
+                .map_err(|error| error.to_string())?;
             if visited.insert(child.id.ok_or("Colección sin _id")?.to_hex()) {
                 tree.push(child);
             }
@@ -1168,8 +1220,10 @@ pub async fn delete_api_collection(payload: DeleteCollectionPayload) -> Result<(
             .modified_count
     };
 
-    handle.delete_many(doc! { "_id": { "$in": ids }, "tipo": TIPO_COLLECTION })
-        .await.map_err(|error| format!("Error al eliminar las colecciones: {error}"))?;
+    handle
+        .delete_many(doc! { "_id": { "$in": ids }, "tipo": TIPO_COLLECTION })
+        .await
+        .map_err(|error| format!("Error al eliminar las colecciones: {error}"))?;
 
     log::info!(
         "Colección {} eliminada ({} requests afectadas)",
@@ -1188,22 +1242,35 @@ pub async fn duplicate_api_collection(id: String) -> Result<String, String> {
     let now = Utc::now();
     let mut mapping = std::collections::HashMap::new();
     for source in &tree {
-        mapping.insert(source.id.ok_or("Colección sin _id")?.to_hex(), ObjectId::new());
+        mapping.insert(
+            source.id.ok_or("Colección sin _id")?.to_hex(),
+            ObjectId::new(),
+        );
     }
     let new_hex = mapping.get(&id).ok_or("Colección sin _id")?.to_hex();
     for source in tree {
         let old_id = source.id.ok_or("Colección sin _id")?.to_hex();
-        let parent_id = source.parent_id.as_ref().and_then(|parent| mapping.get(parent))
-            .map(|id| id.to_hex()).or(source.parent_id.clone());
+        let parent_id = source
+            .parent_id
+            .as_ref()
+            .and_then(|parent| mapping.get(parent))
+            .map(|id| id.to_hex())
+            .or(source.parent_id.clone());
         let copy = ApiCollectionDocument {
             id: mapping.get(&old_id).copied(),
-            nombre: if old_id == id { format!("{} (copia)", source.nombre) } else { source.nombre.clone() },
+            nombre: if old_id == id {
+                format!("{} (copia)", source.nombre)
+            } else {
+                source.nombre.clone()
+            },
             parent_id,
             timestamp: now,
             updated_at: now,
             ..source
         };
-        handle.insert_one(&copy).await
+        handle
+            .insert_one(&copy)
+            .await
             .map_err(|error| format!("Error al duplicar la colección: {error}"))?;
     }
 
@@ -1223,8 +1290,11 @@ pub async fn duplicate_api_collection(id: String) -> Result<String, String> {
             .deserialize_current()
             .map_err(|error| format!("Request inválida en MongoDB: {error}"))?;
         document.id = Some(ObjectId::new());
-        document.coleccion_id = document.coleccion_id.as_ref()
-            .and_then(|old| mapping.get(old)).map(|id| id.to_hex());
+        document.coleccion_id = document
+            .coleccion_id
+            .as_ref()
+            .and_then(|old| mapping.get(old))
+            .map(|id| id.to_hex());
         document.timestamp = now;
         document.updated_at = now;
         document.version = 1;
@@ -1436,7 +1506,8 @@ mod tests {
         let document: ApiCollectionDocument = bson::from_document(doc! {
             "_id": ObjectId::new(), "eid": "TEST", "nombre": "General",
             "timestamp": now, "updated_at": now,
-        }).expect("leer colección anterior sin migración");
+        })
+        .expect("leer colección anterior sin migración");
         assert_eq!(document.parent_id, None);
         assert_eq!(document.into_record().expect("record").parent_id, None);
     }
@@ -1446,16 +1517,21 @@ mod tests {
         let parent = ObjectId::new().to_hex();
         let payload: ApiCollectionPayload = bson::from_document(doc! {
             "eid": "TEST", "nombre": "Subcolección", "parent_id": &parent,
-        }).expect("leer payload");
+        })
+        .expect("leer payload");
         assert_eq!(payload.parent_id.as_deref(), Some(parent.as_str()));
         let now = bson::DateTime::from_chrono(Utc::now());
         let document: ApiCollectionDocument = bson::from_document(doc! {
             "_id": ObjectId::new(), "eid": "TEST", "nombre": "Subcolección",
             "parent_id": &parent, "timestamp": now, "updated_at": now,
-        }).expect("leer subcolección");
+        })
+        .expect("leer subcolección");
         let stored = bson::to_document(&document).expect("persistir subcolección");
         assert_eq!(stored.get_str("parent_id").expect("padre"), parent);
-        assert_eq!(document.into_record().expect("record").parent_id, Some(parent));
+        assert_eq!(
+            document.into_record().expect("record").parent_id,
+            Some(parent)
+        );
     }
 
     #[test]
@@ -1528,7 +1604,9 @@ mod tests {
         };
 
         // Crear.
-        let id = save_api_request_full(payload.clone()).await.expect("guardar");
+        let id = save_api_request_full(payload.clone())
+            .await
+            .expect("guardar");
 
         let saved = get_api_requests_full(ApiRequestFilter {
             eid: eid.to_string(),
@@ -1601,9 +1679,11 @@ mod tests {
         .await
         .expect("listar tras duplicar");
         assert_eq!(saved.len(), 2);
-        assert!(saved
-            .iter()
-            .any(|item| item.id == copy_id && item.nombre.ends_with("(copia)")));
+        assert!(
+            saved
+                .iter()
+                .any(|item| item.id == copy_id && item.nombre.ends_with("(copia)"))
+        );
 
         // Eliminar.
         delete_api_request(copy_id).await.expect("eliminar copia");
@@ -1703,10 +1783,12 @@ mod tests {
         .expect("workspace tras duplicar");
         assert_eq!(workspace.collections.len(), 3);
         assert_eq!(workspace.requests.len(), 3);
-        assert!(workspace
-            .collections
-            .iter()
-            .any(|item| item.id == copia && item.nombre.ends_with("(copia)")));
+        assert!(
+            workspace
+                .collections
+                .iter()
+                .any(|item| item.id == copia && item.nombre.ends_with("(copia)"))
+        );
 
         // Eliminar la colección duplicada elimina sus requests.
         delete_api_collection(DeleteCollectionPayload {

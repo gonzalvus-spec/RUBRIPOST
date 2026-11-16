@@ -3,9 +3,17 @@ import { invoke } from '@tauri-apps/api/core';
 
 /** Usuario autenticado (datos públicos devueltos por el backend). */
 export interface SesionUsuario {
+  id: string;
   usuario: string;
   nombre: string;
   rol: string;
+}
+
+export interface ActualizarPerfilPayload {
+  usuario: string;
+  nombre: string;
+  currentPassword?: string;
+  newPassword?: string;
 }
 
 export interface NuevoUsuarioPayload {
@@ -35,6 +43,8 @@ const esSesionValida = (valor: unknown): valor is SesionUsuario => {
   const registro = valor as Record<string, unknown>;
   return (
     typeof registro.usuario === 'string' &&
+    typeof registro.id === 'string' &&
+    registro.id.length > 0 &&
     registro.usuario.length > 0 &&
     typeof registro.nombre === 'string' &&
     typeof registro.rol === 'string'
@@ -73,6 +83,7 @@ interface AuthState {
   comprobarUsuarios: () => Promise<void>;
   login: (usuario: string, password: string) => Promise<boolean>;
   crearUsuario: (payload: NuevoUsuarioPayload) => Promise<boolean>;
+  actualizarPerfil: (payload: ActualizarPerfilPayload) => Promise<boolean>;
   cerrarSesion: () => Promise<void>;
   limpiarError: () => void;
 }
@@ -127,6 +138,29 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
         guardarSesion(sesion);
         set({ sesion, hayUsuarios: true });
       }
+      return true;
+    } catch (error) {
+      set({ cargando: false, error: mensaje(error) });
+      return false;
+    }
+  },
+
+  actualizarPerfil: async (payload) => {
+    const actual = get().sesion;
+    if (!actual) return false;
+    set({ cargando: true, error: null });
+    try {
+      const sesion = await invoke<SesionUsuario>('update_user_profile', {
+        payload: {
+          user_id: actual.id,
+          usuario: payload.usuario,
+          nombre: payload.nombre,
+          current_password: payload.currentPassword ?? null,
+          new_password: payload.newPassword ?? null,
+        },
+      });
+      guardarSesion(sesion);
+      set({ sesion, cargando: false, error: null });
       return true;
     } catch (error) {
       set({ cargando: false, error: mensaje(error) });

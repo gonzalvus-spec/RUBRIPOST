@@ -26,7 +26,6 @@ import { enviarRequest } from '../../lib/httpClient';
 import { readSendCookies, writeSendCookies } from '../../lib/cookiePreferences';
 import { RubriResponsePanel } from './panels/RubriResponsePanel';
 import { RequestChatPanel } from './request/RequestChatPanel';
-import { moveChatNotes, removeChatNotes } from '../../lib/chatNotes';
 import { readChatCollapsed, writeChatCollapsed } from '../../lib/chatPreferences';
 import { RubriWorkspaceOverview } from './overview/RubriWorkspaceOverview';
 import { RubriStatusBar } from './layout/RubriStatusBar';
@@ -34,6 +33,7 @@ import { RubriNameModal } from './modal/RubriNameModal';
 import { RubriCookiesModal } from '../cookies/RubriCookiesModal';
 import { RubriProyectosModal } from '../proyectos/RubriProyectosModal';
 import { HistorialModal } from '../historial/HistorialModal';
+import { ProfileModal } from '../auth/ProfileModal';
 import { useAuthStore } from '../../store/authStore';
 import {
   CLOSED_MODAL,
@@ -117,8 +117,8 @@ export const RubriApiView = () => {
   const [draftTabOpen, setDraftTabOpen] = useState(false);
   /** Chat de la request activa: contraído deja solo un riel lateral. */
   const [chatCollapsed, setChatCollapsed] = useState(false);
-  const [chatRevision, setChatRevision] = useState(0);
   const [historialAbierto, setHistorialAbierto] = useState(false);
+  const [perfilAbierto, setPerfilAbierto] = useState(false);
   /**
    * Cookies del PROYECTO: el tarro es único por proyecto (EID) y el envío
    * automático se recuerda entre sesiones, sin depender de la request, el
@@ -181,12 +181,6 @@ export const RubriApiView = () => {
       }
       return next;
     });
-
-  /** Descarta las notas de un borrador que se abandona sin guardar. */
-  const discardDraftChat = () => {
-    removeChatNotes(sesion?.usuario ?? '', eid, DRAFT_RESPONSE_KEY);
-    setChatRevision((value) => value + 1);
-  };
 
   // -------------------------------------------------------------------------
   // Redimensionamiento de paneles
@@ -429,7 +423,6 @@ export const RubriApiView = () => {
 
   const handleLoadSaved = async (request: ApiRequestDocument) => {
     if (!(await confirmDiscard())) return;
-    if (!lastSavedId) discardDraftChat();
     loadRequest(request);
     setDraftTabOpen(false);
     setOverviewOpen(false);
@@ -463,7 +456,6 @@ export const RubriApiView = () => {
       setOverviewOpen(false);
     } else {
       setDraftTabOpen(false);
-      discardDraftChat();
       setOverviewOpen(true);
       newRequest();
     }
@@ -512,7 +504,6 @@ export const RubriApiView = () => {
   const handleCambiarProyecto = async (codigo: string) => {
     if (codigo === eid) return;
     if (!(await confirmDiscard())) return;
-    discardDraftChat();
     await cambiarProyecto(codigo);
     setResponses({});
     setOpenTabs([]);
@@ -523,7 +514,6 @@ export const RubriApiView = () => {
 
   const handleNewRequest = async () => {
     if (!(await confirmDiscard())) return;
-    discardDraftChat();
     newRequest();
     setDraftTabOpen(true);
     setOverviewOpen(false);
@@ -533,7 +523,6 @@ export const RubriApiView = () => {
 
   const handleNewRequestIn = async (collectionId: string) => {
     if (!(await confirmDiscard())) return;
-    discardDraftChat();
     setActiveCollection(collectionId);
     newRequest({ coleccionId: collectionId });
     setDraftTabOpen(true);
@@ -558,7 +547,6 @@ export const RubriApiView = () => {
     const request = savedRequests.find((item) => item._id === id);
     if (!request) return;
     if (!(await confirmDiscard())) return;
-    if (!lastSavedId) discardDraftChat();
     loadRequest(request);
     setDraftTabOpen(false);
     setOverviewOpen(false);
@@ -586,7 +574,6 @@ export const RubriApiView = () => {
     } else {
       // No quedan ventanas de request: el Overview vuelve a ocupar el área.
       setDraftTabOpen(false);
-      discardDraftChat();
       setOverviewOpen(true);
       newRequest();
     }
@@ -600,7 +587,6 @@ export const RubriApiView = () => {
   const closeDraft = async () => {
     if (isDirty && !(await confirmDiscard())) return;
     setDraftTabOpen(false);
-    discardDraftChat();
 
     if (openTabs.length === 0) {
       setOverviewOpen(true);
@@ -712,7 +698,7 @@ export const RubriApiView = () => {
     }
   }, [lastSavedId, draftTabOpen]);
 
-  // Al guardar una request nueva, su respuesta y sus notas pasan del borrador
+  // Al guardar una request nueva, su respuesta pasa del borrador
   // al id real. Se exige un guardado reciente para no confundirlo con abrir
   // una request existente desde un borrador.
   const previousSavedIdRef = useRef(lastSavedId);
@@ -724,9 +710,6 @@ export const RubriApiView = () => {
     previousSaveAtRef.current = lastSaveAt;
 
     if (previousId || !lastSavedId || lastSaveAt === previousSaveAt) return;
-
-    moveChatNotes(sesion?.usuario ?? '', eid, DRAFT_RESPONSE_KEY, lastSavedId);
-    setChatRevision((value) => value + 1);
 
     setResponses((current) => {
       const draftEntries = Object.entries(current).filter(([key]) =>
@@ -776,6 +759,7 @@ export const RubriApiView = () => {
     <div className="rubri-app">
       <RubriTopbar
         updater={updater}
+        onOpenProfile={() => setPerfilAbierto(true)}
         sesion={sesion}
         proyectos={proyectos}
         proyectoActivo={eid}
@@ -906,12 +890,10 @@ export const RubriApiView = () => {
               <RequestChatPanel
                 collapsed={chatCollapsed}
                 onToggle={toggleChat}
-                user={sesion?.usuario ?? ''}
-                author={sesion?.nombre || sesion?.usuario || 'Tú'}
+                userId={sesion?.id ?? ''}
                 eid={eid}
-                requestKey={lastSavedId ?? DRAFT_RESPONSE_KEY}
+                requestKey={lastSavedId ?? ''}
                 requestName={nombre || suggestName(nombre, url)}
-                revision={chatRevision}
               />
             </div>
           )}
@@ -941,6 +923,8 @@ export const RubriApiView = () => {
       {historialAbierto && (
         <HistorialModal key={eid} onClose={() => setHistorialAbierto(false)} />
       )}
+
+      {perfilAbierto && <ProfileModal onClose={() => setPerfilAbierto(false)} />}
 
       {modal.open && (
         <RubriNameModal

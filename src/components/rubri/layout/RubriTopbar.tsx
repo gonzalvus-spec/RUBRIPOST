@@ -51,6 +51,7 @@ interface RubriTopbarProps {
   onOpenHistorial: () => void;
   onOpenCookies: () => void;
   onLogout: () => void;
+  onOpenProfile: () => void;
   onActivateTab: (id: string) => void;
   onCloseTab: (id: string) => void;
   onCloseDraft: () => void;
@@ -80,6 +81,7 @@ export const RubriTopbar = ({
   onOpenHistorial,
   onOpenCookies,
   onLogout,
+  onOpenProfile,
   onActivateTab,
   onCloseTab,
   onCloseDraft,
@@ -399,15 +401,18 @@ export const RubriTopbar = ({
         </button>
 
         {sesion && (
-          <div
+          <button
+            type="button"
             className="topbar-user"
+            onClick={onOpenProfile}
             title={`${sesion.nombre} · ${sesion.usuario} (${sesion.rol})`}
+            aria-label="Abrir mi perfil"
           >
             <span className="topbar-user-avatar">
               {(sesion.nombre || sesion.usuario).charAt(0).toUpperCase()}
             </span>
             <span className="topbar-user-name">{sesion.nombre || sesion.usuario}</span>
-          </div>
+          </button>
         )}
 
         <button

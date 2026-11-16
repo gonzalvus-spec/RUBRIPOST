@@ -56,7 +56,7 @@ export const RubriStatusBar = ({ sending, status }: RubriStatusBarProps) => {
             : isWorkspaceCached ? 'Caché local · sincronizando' : lastSyncAt ? 'Conectado' : 'Conectando…'}
         </span>
         <span className="statusbar-sep" />
-        <span>v0.1.1</span>
+        <span>v0.1.3</span>
       </div>
     </footer>
   );

@@ -400,6 +400,17 @@
   padding: 0 8px 0 4px;
   border-left: 1px solid var(--rubri-border-soft);
   height: 24px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: var(--rubri-transition);
+}
+
+.topbar-user:hover {
+  border-radius: 6px;
+  background: var(--rubri-bg-hover);
 }
 
 .topbar-user-avatar {

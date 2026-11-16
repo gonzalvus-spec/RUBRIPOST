@@ -11,10 +11,10 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use chrono::{DateTime, Duration, Utc};
-use mongodb::bson::{doc, oid::ObjectId, Document};
+use mongodb::bson::{Document, doc, oid::ObjectId};
 use mongodb::{Collection, IndexModel};
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue, COOKIE, SET_COOKIE};
 use reqwest::Method;
+use reqwest::header::{COOKIE, HeaderMap, HeaderName, HeaderValue, SET_COOKIE};
 use serde::{Deserialize, Serialize};
 
 use crate::fechas::{fecha_bson_o_texto, fecha_opcional_bson_o_texto};
@@ -206,9 +206,7 @@ async fn ensure_cookie_indexes() -> Result<(), String> {
 fn parsear_url(url: &str) -> Result<reqwest::Url, String> {
     let texto = url.trim();
     if texto.is_empty() {
-        return Err(
-            "Escribe una URL válida para administrar sus cookies.".to_string(),
-        );
+        return Err("Escribe una URL válida para administrar sus cookies.".to_string());
     }
 
     if let Ok(parsed) = reqwest::Url::parse(texto) {
@@ -312,10 +310,7 @@ async fn cookies_del_tarro(eid: &str) -> Result<Vec<CookieDocumento>, String> {
 }
 
 /// Cookies que deben enviarse en una petición a `url`.
-async fn cookies_aplicables(
-    eid: &str,
-    url: &str,
-) -> Result<Vec<CookieDocumento>, String> {
+async fn cookies_aplicables(eid: &str, url: &str) -> Result<Vec<CookieDocumento>, String> {
     let parsed = parsear_url(url)?;
     let host = dominio_de(url)?;
     let ruta = ruta_de(url);
@@ -589,7 +584,12 @@ pub async fn listar_cookies(payload: ListarCookiesPayload) -> Result<Vec<CookieR
 
     // Sin URL se devuelve el tarro completo del proyecto: las cookies son del
     // proyecto, no de la request ni de la colección donde está guardada.
-    let host = match payload.url.as_deref().map(str::trim).filter(|url| !url.is_empty()) {
+    let host = match payload
+        .url
+        .as_deref()
+        .map(str::trim)
+        .filter(|url| !url.is_empty())
+    {
         Some(url) => Some(dominio_de(url)?),
         None => None,
     };
@@ -653,7 +653,10 @@ pub async fn guardar_cookie(payload: GuardarCookiePayload) -> Result<CookieRegis
 
     let cookies = get_cookies().await?;
     let ahora = Utc::now();
-    let editing = payload.id.as_deref().is_some_and(|id| !id.trim().is_empty());
+    let editing = payload
+        .id
+        .as_deref()
+        .is_some_and(|id| !id.trim().is_empty());
 
     // Si llega un id se edita esa cookie; si no, se crea o reemplaza la que
     // coincida en dominio, nombre y ruta (igual que el tarro de Bruno).
@@ -663,9 +666,7 @@ pub async fn guardar_cookie(payload: GuardarCookiePayload) -> Result<CookieRegis
         .map(str::trim)
         .filter(|valor| !valor.is_empty())
     {
-        Some(id) => {
-            cookie_id_filter(id, &eid)?
-        }
+        Some(id) => cookie_id_filter(id, &eid)?,
         None => doc! { "eid": &eid, "dominio": &dominio, "nombre": &nombre, "ruta": &ruta },
     };
 
@@ -706,13 +707,15 @@ pub async fn guardar_cookie(payload: GuardarCookiePayload) -> Result<CookieRegis
 }
 
 fn project_code(eid: &str) -> Result<String, String> {
-    if eid.trim().is_empty() { return Err("Indica el proyecto de las cookies".to_string()); }
+    if eid.trim().is_empty() {
+        return Err("Indica el proyecto de las cookies".to_string());
+    }
     Ok(eid.trim().to_string())
 }
 
 fn cookie_id_filter(id: &str, eid: &str) -> Result<Document, String> {
-    let object_id = ObjectId::parse_str(id)
-        .map_err(|_| "Identificador de cookie inválido".to_string())?;
+    let object_id =
+        ObjectId::parse_str(id).map_err(|_| "Identificador de cookie inválido".to_string())?;
     Ok(doc! { "_id": object_id, "eid": project_code(eid)? })
 }
 
@@ -726,7 +729,9 @@ pub async fn eliminar_cookie(payload: EliminarCookiePayload) -> Result<(), Strin
         .delete_one(filter)
         .await
         .map_err(|error| format!("No se pudo eliminar la cookie: {error}"))?;
-    if result.deleted_count == 0 { return Err("La cookie no existe en este proyecto".to_string()); }
+    if result.deleted_count == 0 {
+        return Err("La cookie no existe en este proyecto".to_string());
+    }
 
     Ok(())
 }
@@ -794,7 +799,10 @@ mod tests {
         let a = cookie_id_filter(&id, "PROYECTO-A").expect("filtro A");
         let b = cookie_id_filter(&id, "PROYECTO-B").expect("filtro B");
         assert_eq!(a.get_str("eid").unwrap(), "PROYECTO-A");
-        assert_eq!(a.get_object_id("_id").unwrap(), b.get_object_id("_id").unwrap());
+        assert_eq!(
+            a.get_object_id("_id").unwrap(),
+            b.get_object_id("_id").unwrap()
+        );
         assert_ne!(a, b);
         assert!(cookie_id_filter(&id, " ").is_err());
         assert!(project_code("").is_err());
@@ -806,11 +814,11 @@ mod tests {
             dominio_de("https://www.ejemplo.com/a/b").unwrap(),
             "ejemplo.com"
         );
-        assert_eq!(dominio_de("https://api.ejemplo.com").unwrap(), "api.ejemplo.com");
         assert_eq!(
-            dominio_de("api.ejemplo.com/v1").unwrap(),
+            dominio_de("https://api.ejemplo.com").unwrap(),
             "api.ejemplo.com"
         );
+        assert_eq!(dominio_de("api.ejemplo.com/v1").unwrap(), "api.ejemplo.com");
         assert_eq!(dominio_de("localhost:3000/api").unwrap(), "localhost");
         assert!(dominio_de("/api/v1").is_err());
         assert!(dominio_de("no-es-url").is_err());

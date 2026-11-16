@@ -7,11 +7,11 @@
 //! Los comandos se exponen a la UI mediante Tauri.
 
 use chrono::{DateTime, Duration, Utc};
-use mongodb::bson::{doc, oid::ObjectId, Document};
+use mongodb::bson::{Document, doc, oid::ObjectId};
 use mongodb::{Collection, IndexModel};
 use serde::{Deserialize, Serialize};
 
-use argon2::password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, SaltString};
+use argon2::password_hash::{PasswordHash, PasswordHasher, SaltString, rand_core::OsRng};
 use argon2::{Argon2, PasswordVerifier};
 
 use crate::fechas::{fecha_bson_o_texto, fecha_opcional_bson_o_texto};
@@ -57,6 +57,7 @@ pub struct UsuarioDocumento {
 /// Datos públicos del usuario que la UI puede ver.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SesionUsuario {
+    pub id: String,
     pub usuario: String,
     pub nombre: String,
     pub rol: String,
@@ -65,6 +66,7 @@ pub struct SesionUsuario {
 impl UsuarioDocumento {
     fn a_sesion(&self) -> SesionUsuario {
         SesionUsuario {
+            id: self.id.as_ref().map(|id| id.to_hex()).unwrap_or_default(),
             usuario: self.usuario.clone(),
             nombre: self.nombre.clone(),
             rol: self.rol.clone(),
@@ -91,6 +93,17 @@ pub struct NuevoUsuarioPayload {
     pub admin_usuario: Option<String>,
     #[serde(default)]
     pub admin_password: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+pub struct ActualizarPerfilPayload {
+    pub user_id: String,
+    pub usuario: String,
+    pub nombre: String,
+    #[serde(default)]
+    pub current_password: Option<String>,
+    #[serde(default)]
+    pub new_password: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -170,8 +183,12 @@ async fn ensure_auth_indexes() -> Result<(), String> {
     historial
         .create_indexes(vec![
             IndexModel::builder().keys(doc! { "fecha": -1 }).build(),
-            IndexModel::builder().keys(doc! { "eid": 1, "fecha": -1 }).build(),
-            IndexModel::builder().keys(doc! { "usuario": 1, "fecha": -1 }).build(),
+            IndexModel::builder()
+                .keys(doc! { "eid": 1, "fecha": -1 })
+                .build(),
+            IndexModel::builder()
+                .keys(doc! { "usuario": 1, "fecha": -1 })
+                .build(),
         ])
         .await
         .map_err(|error| format!("No se pudo crear el índice del historial: {error}"))?;
@@ -185,9 +202,8 @@ async fn ensure_auth_indexes() -> Result<(), String> {
 /// que la colección no crece sin límite.
 pub async fn purgar_historial_antiguo() -> Result<u64, String> {
     let historial = get_historial().await?;
-    let corte = mongodb::bson::DateTime::from_chrono(
-        Utc::now() - Duration::days(HISTORIAL_DIAS_RETENCION),
-    );
+    let corte =
+        mongodb::bson::DateTime::from_chrono(Utc::now() - Duration::days(HISTORIAL_DIAS_RETENCION));
 
     let resultado = historial
         .delete_many(doc! { "fecha": { "$lt": corte } })
@@ -471,6 +487,82 @@ pub async fn crear_usuario(payload: NuevoUsuarioPayload) -> Result<SesionUsuario
     Ok(documento.a_sesion())
 }
 
+/// Actualiza los datos editables del usuario autenticado. El rol y el estado
+/// activo nunca se aceptan desde este comando para impedir autoelevaciones.
+#[tauri::command]
+pub async fn update_user_profile(
+    payload: ActualizarPerfilPayload,
+) -> Result<SesionUsuario, String> {
+    ensure_auth_indexes().await?;
+
+    let user_id = ObjectId::parse_str(payload.user_id.trim())
+        .map_err(|_| "El identificador de usuario no es válido".to_string())?;
+    let usuario = normalizar_usuario(&payload.usuario);
+    let nombre = payload.nombre.trim().to_string();
+    if usuario.is_empty() || nombre.is_empty() {
+        return Err("Usuario y nombre son obligatorios".to_string());
+    }
+
+    let usuarios = get_usuarios().await?;
+    let actual = usuarios
+        .find_one(doc! { "_id": user_id, "activo": true })
+        .await
+        .map_err(|error| format!("No se pudo consultar el usuario: {error}"))?
+        .ok_or_else(|| "La sesión ya no es válida. Vuelve a iniciar sesión.".to_string())?;
+
+    let duplicado = usuarios
+        .find_one(doc! { "usuario": &usuario, "_id": { "$ne": user_id } })
+        .await
+        .map_err(|error| format!("No se pudo validar el nombre de usuario: {error}"))?;
+    if duplicado.is_some() {
+        return Err("Ese nombre de usuario ya está registrado".to_string());
+    }
+
+    let mut cambios = doc! { "usuario": &usuario, "nombre": &nombre };
+    let nueva_clave = payload.new_password.as_deref().unwrap_or_default();
+    if !nueva_clave.is_empty() {
+        if nueva_clave.len() < 6 {
+            return Err("La nueva contraseña debe tener al menos 6 caracteres".to_string());
+        }
+        let clave_actual = payload.current_password.as_deref().unwrap_or_default();
+        if !verificar_password(clave_actual, &actual.password_hash) {
+            return Err("La contraseña actual no es correcta".to_string());
+        }
+        cambios.insert("password_hash", hash_password(nueva_clave)?);
+    }
+
+    usuarios
+        .update_one(doc! { "_id": user_id }, doc! { "$set": cambios })
+        .await
+        .map_err(|error| {
+            if error.to_string().contains("E11000") {
+                "Ese nombre de usuario ya está registrado".to_string()
+            } else {
+                format!("No se pudo actualizar el perfil: {error}")
+            }
+        })?;
+
+    let actualizado = usuarios
+        .find_one(doc! { "_id": user_id })
+        .await
+        .map_err(|error| format!("No se pudo recargar el perfil: {error}"))?
+        .ok_or_else(|| "No se encontró el usuario actualizado".to_string())?;
+
+    let _ = insertar_historial(RegistrarHistorialPayload {
+        eid: None,
+        usuario: actualizado.usuario.clone(),
+        accion: "Actualizó su perfil".to_string(),
+        entidad: "usuario".to_string(),
+        entidad_id: Some(user_id.to_hex()),
+        nombre: Some(actualizado.nombre.clone()),
+        detalle: (actual.usuario != actualizado.usuario)
+            .then(|| format!("Usuario anterior: {}", actual.usuario)),
+    })
+    .await;
+
+    Ok(actualizado.a_sesion())
+}
+
 /// Deja constancia del cierre de sesión en la bitácora.
 #[tauri::command]
 pub async fn cerrar_sesion(usuario: String) -> Result<(), String> {
@@ -504,7 +596,9 @@ fn consulta_historial(filtro: &HistorialFiltro) -> Result<Document, String> {
     let mut query = doc! { "eid": eid, "entidad": { "$ne": "collection" } };
     if let Some(usuario) = filtro.usuario.as_deref() {
         let clave = normalizar_usuario(usuario);
-        if !clave.is_empty() { query.insert("usuario", clave); }
+        if !clave.is_empty() {
+            query.insert("usuario", clave);
+        }
     }
     Ok(query)
 }
@@ -592,7 +686,11 @@ mod tests {
 
     #[test]
     fn historial_exige_proyecto_y_lo_incluye_en_la_consulta() {
-        let mut filtro = HistorialFiltro { eid: "PROYECTO-A".into(), usuario: Some(" ANA ".into()), limit: None };
+        let mut filtro = HistorialFiltro {
+            eid: "PROYECTO-A".into(),
+            usuario: Some(" ANA ".into()),
+            limit: None,
+        };
         let query = consulta_historial(&filtro).expect("filtro por proyecto");
         assert_eq!(query.get_str("eid").unwrap(), "PROYECTO-A");
         assert_eq!(query.get_str("usuario").unwrap(), "ana");

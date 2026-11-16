@@ -1,8 +1,9 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 
 mod auth;
-mod export;
+mod chat;
 mod config;
+mod export;
 mod fechas;
 mod http;
 mod mongo;
@@ -10,20 +11,20 @@ mod proyectos;
 
 use auth::{
     cerrar_sesion, crear_usuario, hay_usuarios, listar_historial, login, registrar_historial,
+    update_user_profile,
 };
-use http::{
-    eliminar_cookie, enviar_request, guardar_cookie, limpiar_cookies, listar_cookies,
+use chat::{
+    delete_chat_message, get_chat_messages, send_chat_message, update_chat_message,
 };
+use export::save_export_json;
+use http::{eliminar_cookie, enviar_request, guardar_cookie, limpiar_cookies, listar_cookies};
 use mongo::{
     delete_api_collection, delete_api_request, duplicate_api_collection, duplicate_api_request,
-    get_api_requests_full, get_api_workspace, move_api_request, reorder_api_collections,
-    get_api_workspace_snapshot,
-    export_api_collections,
-    move_api_collection,
-    reorder_api_requests, save_api_collection, save_api_request_full,
+    export_api_collections, get_api_requests_full, get_api_workspace, get_api_workspace_snapshot,
+    move_api_collection, move_api_request, reorder_api_collections, reorder_api_requests,
+    save_api_collection, save_api_request_full,
 };
 use proyectos::{eliminar_proyecto, guardar_proyecto, listar_proyectos};
-use export::save_export_json;
 
 /// Carga la configuración antes de abrir el pool de MongoDB.
 ///
@@ -56,9 +57,9 @@ pub fn run() {
             tauri::async_runtime::spawn(async {
                 match auth::purgar_historial_antiguo().await {
                     Ok(0) => {}
-                    Ok(total) => log::info!(
-                        "Historial: {total} entrada(s) con más de 30 días eliminadas"
-                    ),
+                    Ok(total) => {
+                        log::info!("Historial: {total} entrada(s) con más de 30 días eliminadas")
+                    }
                     Err(error) => log::warn!("No se pudo purgar el historial: {error}"),
                 }
             });
@@ -81,11 +82,16 @@ pub fn run() {
             delete_api_request,
             duplicate_api_request,
             login,
+            update_user_profile,
             crear_usuario,
             cerrar_sesion,
             hay_usuarios,
             registrar_historial,
             listar_historial,
+            get_chat_messages,
+            send_chat_message,
+            update_chat_message,
+            delete_chat_message,
             enviar_request,
             listar_cookies,
             guardar_cookie,

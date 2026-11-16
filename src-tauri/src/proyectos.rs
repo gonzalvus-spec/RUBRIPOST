@@ -13,8 +13,8 @@ use std::collections::HashSet;
 
 use chrono::{DateTime, Utc};
 use mongodb::{
-    bson::{doc, oid::ObjectId},
     Client, Collection,
+    bson::{doc, oid::ObjectId},
 };
 use serde::{Deserialize, Serialize};
 
@@ -93,7 +93,11 @@ pub struct DeleteProyectoPayload {
 }
 
 impl ProyectoDocumento {
-    fn into_registro(self, total_requests: i64, total_colecciones: i64) -> Result<ProyectoRegistro, String> {
+    fn into_registro(
+        self,
+        total_requests: i64,
+        total_colecciones: i64,
+    ) -> Result<ProyectoRegistro, String> {
         let id = self
             .id
             .ok_or_else(|| "El proyecto de MongoDB no tiene _id".to_string())?;
@@ -146,7 +150,10 @@ async fn ensure_indices(proyectos: &Collection<ProyectoDocumento>) -> Result<(),
     // Versiones anteriores guardaban el identificador en un campo `id` (sin
     // `_id`), lo que rompía editar/eliminar. Se limpia ese campo sobrante.
     if let Ok(resultado) = proyectos
-        .update_many(doc! { "id": { "$exists": true } }, doc! { "$unset": { "id": "" } })
+        .update_many(
+            doc! { "id": { "$exists": true } },
+            doc! { "$unset": { "id": "" } },
+        )
         .await
     {
         if resultado.modified_count > 0 {
@@ -176,11 +183,13 @@ fn normalizar_codigo(codigo: &str) -> Result<String, String> {
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
     {
-        return Err(
-            "El código solo admite letras, números, guion, guion bajo y punto".to_string(),
-        );
+        return Err("El código solo admite letras, números, guion, guion bajo y punto".to_string());
     }
-    if !limpio.chars().next().is_some_and(|c| c.is_ascii_alphanumeric()) {
+    if !limpio
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphanumeric())
+    {
         return Err("El código debe empezar por una letra o un número".to_string());
     }
 
@@ -483,7 +492,10 @@ pub async fn eliminar_proyecto(payload: DeleteProyectoPayload) -> Result<(), Str
             proyecto.codigo
         );
     } else {
-        log::info!("Proyecto {} eliminado (contenido conservado)", proyecto.codigo);
+        log::info!(
+            "Proyecto {} eliminado (contenido conservado)",
+            proyecto.codigo
+        );
     }
 
     Ok(())
@@ -510,9 +522,11 @@ async fn migrar_eid(origen: &str, destino: &str) -> Result<(), String> {
         .await
         .map_err(|error| format!("No se pudieron migrar las cookies: {error}"))?;
 
-    datos.collection::<mongodb::bson::Document>("historial")
+    datos
+        .collection::<mongodb::bson::Document>("historial")
         .update_many(doc! { "eid": origen }, doc! { "$set": { "eid": destino } })
-        .await.map_err(|error| format!("No se pudo migrar el historial del proyecto: {error}"))?;
+        .await
+        .map_err(|error| format!("No se pudo migrar el historial del proyecto: {error}"))?;
 
     log::info!(
         "EID migrado {} → {} ({} documentos, {} cookies)",
@@ -568,9 +582,18 @@ async fn flujo_crud_proyectos() {
 
     // Limpieza de ejecuciones anteriores.
     for eid in eids {
-        requests.delete_many(doc! { "eid": eid }).await.expect("limpiar requests");
-        cookies.delete_many(doc! { "eid": eid }).await.expect("limpiar cookies");
-        fichas.delete_many(doc! { "codigo": eid }).await.expect("limpiar fichas");
+        requests
+            .delete_many(doc! { "eid": eid })
+            .await
+            .expect("limpiar requests");
+        cookies
+            .delete_many(doc! { "eid": eid })
+            .await
+            .expect("limpiar cookies");
+        fichas
+            .delete_many(doc! { "codigo": eid })
+            .await
+            .expect("limpiar fichas");
     }
 
     let proyectos_antes = listar_proyectos().await.expect("listar inicial").len();
@@ -594,9 +617,13 @@ async fn flujo_crud_proyectos() {
     );
 
     // Editar sin cambiar el código.
-    guardar_proyecto(payload_de(Some(id.clone()), "TST-PROY-1", "Proyecto uno editado"))
-        .await
-        .expect("editar");
+    guardar_proyecto(payload_de(
+        Some(id.clone()),
+        "TST-PROY-1",
+        "Proyecto uno editado",
+    ))
+    .await
+    .expect("editar");
     let lista = listar_proyectos().await.expect("listar 2");
     assert!(
         lista.iter().any(|p| p.nombre == "Proyecto uno editado"),
@@ -608,9 +635,13 @@ async fn flujo_crud_proyectos() {
         .insert_one(doc! { "eid": "TST-PROY-1", "tipo": "request", "nombre": "demo" })
         .await
         .expect("insertar request");
-    guardar_proyecto(payload_de(Some(id.clone()), "TST-PROY-2", "Proyecto uno editado"))
-        .await
-        .expect("editar código");
+    guardar_proyecto(payload_de(
+        Some(id.clone()),
+        "TST-PROY-2",
+        "Proyecto uno editado",
+    ))
+    .await
+    .expect("editar código");
     let migradas = requests
         .count_documents(doc! { "eid": "TST-PROY-2" })
         .await
@@ -701,9 +732,18 @@ async fn flujo_crud_proyectos() {
 
     // Limpieza de lo que dejó la prueba.
     for eid in eids {
-        requests.delete_many(doc! { "eid": eid }).await.expect("limpiar requests");
-        cookies.delete_many(doc! { "eid": eid }).await.expect("limpiar cookies");
-        fichas.delete_many(doc! { "codigo": eid }).await.expect("limpiar fichas");
+        requests
+            .delete_many(doc! { "eid": eid })
+            .await
+            .expect("limpiar requests");
+        cookies
+            .delete_many(doc! { "eid": eid })
+            .await
+            .expect("limpiar cookies");
+        fichas
+            .delete_many(doc! { "codigo": eid })
+            .await
+            .expect("limpiar fichas");
     }
 
     assert_eq!(
