@@ -524,7 +524,13 @@ async fn migrar_eid(origen: &str, destino: &str) -> Result<(), String> {
 
     datos
         .collection::<mongodb::bson::Document>("historial")
-        .update_many(doc! { "eid": origen }, doc! { "$set": { "eid": destino } })
+        .update_many(
+            doc! { "$or": [
+                { "project_id": origen },
+                { "project_id": { "$exists": false }, "eid": origen },
+            ] },
+            doc! { "$set": { "project_id": destino } },
+        )
         .await
         .map_err(|error| format!("No se pudo migrar el historial del proyecto: {error}"))?;
 

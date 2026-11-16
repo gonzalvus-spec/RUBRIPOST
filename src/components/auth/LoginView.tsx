@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { LoaderCircle, Lock, LogIn, ShieldCheck, User, UserPlus } from 'lucide-react';
 
 import rubriLogo from '../../assets/rubrifact-logo.png';
@@ -15,7 +15,6 @@ export const LoginView = () => {
   const hayUsuarios = useAuthStore((state) => state.hayUsuarios);
   const cargando = useAuthStore((state) => state.cargando);
   const error = useAuthStore((state) => state.error);
-  const comprobarUsuarios = useAuthStore((state) => state.comprobarUsuarios);
   const login = useAuthStore((state) => state.login);
   const crearUsuario = useAuthStore((state) => state.crearUsuario);
   const limpiarError = useAuthStore((state) => state.limpiarError);
@@ -27,10 +26,6 @@ export const LoginView = () => {
   const [aviso, setAviso] = useState<string | null>(null);
 
   const esArranque = hayUsuarios === false;
-
-  useEffect(() => {
-    void comprobarUsuarios();
-  }, [comprobarUsuarios]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();

@@ -6,7 +6,7 @@
 //!
 //! Los comandos se exponen a la UI mediante Tauri.
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use mongodb::bson::{Document, doc, oid::ObjectId};
 use mongodb::{Collection, IndexModel};
 use serde::{Deserialize, Serialize};
@@ -24,10 +24,7 @@ use crate::mongo::get_client;
 const USUARIOS_COLLECTION: &str = "usuarios";
 const HISTORIAL_COLLECTION: &str = "historial";
 const DEFAULT_DB: &str = "rubripost_db";
-const HISTORIAL_LIMITE_DEFECTO: u32 = 200;
-const HISTORIAL_LIMITE_MAX: u32 = 1000;
-/// Días que se conservan las entradas del historial en MongoDB.
-const HISTORIAL_DIAS_RETENCION: i64 = 30;
+const GLOBAL_PROJECT_ID: &str = "GLOBAL";
 const ROL_ADMIN: &str = "admin";
 const ROL_USUARIO: &str = "usuario";
 
@@ -108,8 +105,8 @@ pub struct ActualizarPerfilPayload {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct RegistrarHistorialPayload {
-    #[serde(default)]
-    pub eid: Option<String>,
+    #[serde(default, alias = "eid")]
+    pub project_id: Option<String>,
     pub usuario: String,
     /// Acción realizada: "Creó request", "Eliminó colección", "Ingresó", etc.
     pub accion: String,
@@ -125,7 +122,7 @@ pub struct RegistrarHistorialPayload {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HistorialEntrada {
-    pub eid: Option<String>,
+    pub project_id: Option<String>,
     pub usuario: String,
     pub accion: String,
     pub entidad: String,
@@ -141,11 +138,8 @@ pub struct HistorialEntrada {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HistorialFiltro {
-    pub eid: String,
-    #[serde(default)]
-    pub usuario: Option<String>,
-    #[serde(default)]
-    pub limit: Option<u32>,
+    #[serde(alias = "eid")]
+    pub project_id: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -184,7 +178,7 @@ async fn ensure_auth_indexes() -> Result<(), String> {
         .create_indexes(vec![
             IndexModel::builder().keys(doc! { "fecha": -1 }).build(),
             IndexModel::builder()
-                .keys(doc! { "eid": 1, "fecha": -1 })
+                .keys(doc! { "project_id": 1, "fecha": -1 })
                 .build(),
             IndexModel::builder()
                 .keys(doc! { "usuario": 1, "fecha": -1 })
@@ -194,23 +188,6 @@ async fn ensure_auth_indexes() -> Result<(), String> {
         .map_err(|error| format!("No se pudo crear el índice del historial: {error}"))?;
 
     Ok(())
-}
-
-/// Borra del historial las entradas con más de 30 días.
-///
-/// Se ejecuta al arrancar la app y cada vez que se abre el historial, de modo
-/// que la colección no crece sin límite.
-pub async fn purgar_historial_antiguo() -> Result<u64, String> {
-    let historial = get_historial().await?;
-    let corte =
-        mongodb::bson::DateTime::from_chrono(Utc::now() - Duration::days(HISTORIAL_DIAS_RETENCION));
-
-    let resultado = historial
-        .delete_many(doc! { "fecha": { "$lt": corte } })
-        .await
-        .map_err(|error| format!("No se pudo limpiar el historial: {error}"))?;
-
-    Ok(resultado.deleted_count)
 }
 
 // ---------------------------------------------------------------------------
@@ -239,20 +216,20 @@ fn verificar_password(password: &str, hash: &str) -> bool {
 }
 
 async fn insertar_historial(entrada: RegistrarHistorialPayload) -> Result<(), String> {
-    // Los cambios de carpetas, colecciones y subcolecciones no forman parte de
-    // la actividad relevante del workspace.
-    if entrada.entidad.trim().eq_ignore_ascii_case("collection") {
-        return Ok(());
-    }
-
     let usuario = entrada.usuario.trim();
     if usuario.is_empty() {
         return Err("El historial requiere un usuario".to_string());
     }
 
     let historial = get_historial().await?;
+    let project_id = entrada
+        .project_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|project_id| !project_id.is_empty())
+        .unwrap_or(GLOBAL_PROJECT_ID);
     let documento = doc! {
-        "eid": entrada.eid.as_deref().map(str::trim).filter(|eid| !eid.is_empty()),
+        "project_id": project_id,
         "usuario": usuario,
         "accion": entrada.accion.trim(),
         "entidad": entrada.entidad.trim(),
@@ -375,7 +352,7 @@ pub async fn login(payload: LoginPayload) -> Result<SesionUsuario, String> {
     let sesion = documento.a_sesion();
 
     let _ = insertar_historial(RegistrarHistorialPayload {
-        eid: None,
+        project_id: None,
         usuario: sesion.usuario.clone(),
         accion: "Ingresó".to_string(),
         entidad: "sesion".to_string(),
@@ -473,7 +450,7 @@ pub async fn crear_usuario(payload: NuevoUsuarioPayload) -> Result<SesionUsuario
     };
 
     let _ = insertar_historial(RegistrarHistorialPayload {
-        eid: None,
+        project_id: None,
         usuario: autor,
         accion: "Creó usuario".to_string(),
         entidad: "usuario".to_string(),
@@ -549,7 +526,7 @@ pub async fn update_user_profile(
         .ok_or_else(|| "No se encontró el usuario actualizado".to_string())?;
 
     let _ = insertar_historial(RegistrarHistorialPayload {
-        eid: None,
+        project_id: None,
         usuario: actualizado.usuario.clone(),
         accion: "Actualizó su perfil".to_string(),
         entidad: "usuario".to_string(),
@@ -567,7 +544,7 @@ pub async fn update_user_profile(
 #[tauri::command]
 pub async fn cerrar_sesion(usuario: String) -> Result<(), String> {
     insertar_historial(RegistrarHistorialPayload {
-        eid: None,
+        project_id: None,
         usuario,
         accion: "Cerró sesión".to_string(),
         entidad: "sesion".to_string(),
@@ -581,46 +558,47 @@ pub async fn cerrar_sesion(usuario: String) -> Result<(), String> {
 /// Registra una acción en la bitácora (la fecha la pone el servidor).
 #[tauri::command]
 pub async fn registrar_historial(payload: RegistrarHistorialPayload) -> Result<(), String> {
-    if payload.eid.as_deref().unwrap_or_default().trim().is_empty() {
+    if payload
+        .project_id
+        .as_deref()
+        .unwrap_or_default()
+        .trim()
+        .is_empty()
+    {
         return Err("Indica el proyecto del cambio".to_string());
     }
     insertar_historial(payload).await
 }
 
 fn consulta_historial(filtro: &HistorialFiltro) -> Result<Document, String> {
-    let eid = filtro.eid.trim();
-    if eid.is_empty() {
+    let project_id = filtro.project_id.trim();
+    if project_id.is_empty() {
         return Err("Indica el proyecto del historial".to_string());
     }
-    // Además de impedir nuevas altas, oculta entradas antiguas de colecciones.
-    let mut query = doc! { "eid": eid, "entidad": { "$ne": "collection" } };
-    if let Some(usuario) = filtro.usuario.as_deref() {
-        let clave = normalizar_usuario(usuario);
-        if !clave.is_empty() {
-            query.insert("usuario", clave);
-        }
-    }
-    Ok(query)
+    Ok(doc! { "project_id": project_id })
 }
 
-/// Devuelve exclusivamente la bitácora del proyecto indicado.
+/// Devuelve toda la bitácora del proyecto, sin filtros por usuario o acción.
 #[tauri::command]
 pub async fn listar_historial(filtro: HistorialFiltro) -> Result<Vec<HistorialEntrada>, String> {
     let query = consulta_historial(&filtro)?;
-    if let Err(error) = purgar_historial_antiguo().await {
-        log::warn!("No se pudo purgar el historial: {error}");
-    }
-
-    let limite = filtro
-        .limit
-        .unwrap_or(HISTORIAL_LIMITE_DEFECTO)
-        .clamp(1, HISTORIAL_LIMITE_MAX) as i64;
-
     let historial = get_historial().await?;
+
+    // Compatibilidad con entradas creadas antes de adoptar `project_id`.
+    historial
+        .update_many(
+            doc! {
+                "project_id": { "$exists": false },
+                "eid": filtro.project_id.trim(),
+            },
+            doc! { "$set": { "project_id": filtro.project_id.trim() } },
+        )
+        .await
+        .map_err(|error| format!("No se pudo migrar el historial del proyecto: {error}"))?;
+
     let mut cursor = historial
         .find(query)
         .sort(doc! { "fecha": -1 })
-        .limit(limite)
         .await
         .map_err(|error| format!("No se pudo leer el historial: {error}"))?;
 
@@ -646,7 +624,10 @@ pub async fn listar_historial(filtro: HistorialFiltro) -> Result<Vec<HistorialEn
                 .unwrap_or_default();
 
             HistorialEntrada {
-                eid: documento.get_str("eid").ok().map(str::to_string),
+                project_id: documento
+                    .get_str("project_id")
+                    .ok()
+                    .map(str::to_string),
                 usuario: documento.get_str("usuario").unwrap_or_default().to_string(),
                 accion: documento.get_str("accion").unwrap_or_default().to_string(),
                 entidad: documento.get_str("entidad").unwrap_or_default().to_string(),
@@ -685,19 +666,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn historial_exige_proyecto_y_lo_incluye_en_la_consulta() {
-        let mut filtro = HistorialFiltro {
-            eid: "PROYECTO-A".into(),
-            usuario: Some(" ANA ".into()),
-            limit: None,
+    fn historial_filtra_solo_por_proyecto() {
+        let filtro = HistorialFiltro {
+            project_id: "PROYECTO-A".into(),
         };
-        let query = consulta_historial(&filtro).expect("filtro por proyecto");
-        assert_eq!(query.get_str("eid").unwrap(), "PROYECTO-A");
-        assert_eq!(query.get_str("usuario").unwrap(), "ana");
-        filtro.eid = "PROYECTO-B".into();
-        assert_ne!(query, consulta_historial(&filtro).unwrap());
-        filtro.eid = " ".into();
-        assert!(consulta_historial(&filtro).is_err());
+        assert_eq!(
+            consulta_historial(&filtro).unwrap(),
+            doc! { "project_id": "PROYECTO-A" }
+        );
     }
 
     #[test]

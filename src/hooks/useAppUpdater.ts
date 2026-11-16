@@ -16,6 +16,7 @@ export interface AppUpdaterState {
   notes: string | null;
   progress: number;
   error: string | null;
+  overlay: boolean;
 }
 
 export type UpdateCheckResult = 'available' | 'current' | 'error' | 'unavailable';
@@ -26,6 +27,7 @@ const INITIAL_STATE: AppUpdaterState = {
   notes: null,
   progress: 0,
   error: null,
+  overlay: false,
 };
 
 const isTauri = (): boolean =>
@@ -45,10 +47,18 @@ export const useAppUpdater = () => {
   const updateRef = useRef<Update | null>(null);
   const automaticCheckStarted = useRef(false);
 
-  const checkForUpdates = useCallback(async (): Promise<UpdateCheckResult> => {
+  const checkForUpdates = useCallback(async (
+    options: { visual?: boolean } = {},
+  ): Promise<UpdateCheckResult> => {
     if (!isTauri()) return 'unavailable';
 
-    setState((current) => ({ ...current, status: 'checking', error: null }));
+    const visual = options.visual ?? true;
+    setState((current) => ({
+      ...current,
+      status: 'checking',
+      error: null,
+      overlay: visual,
+    }));
     try {
       const update = await check();
       updateRef.current = update;
@@ -64,6 +74,7 @@ export const useAppUpdater = () => {
         notes: update.body ?? null,
         progress: 0,
         error: null,
+        overlay: false,
       });
       return 'available';
     } catch (error) {
@@ -72,6 +83,7 @@ export const useAppUpdater = () => {
         ...INITIAL_STATE,
         status: 'error',
         error: errorMessage(error),
+        overlay: false,
       });
       return 'error';
     }
@@ -83,7 +95,13 @@ export const useAppUpdater = () => {
 
     let downloaded = 0;
     let total = 0;
-    setState((current) => ({ ...current, status: 'downloading', progress: 0, error: null }));
+    setState((current) => ({
+      ...current,
+      status: 'downloading',
+      progress: 0,
+      error: null,
+      overlay: true,
+    }));
 
     try {
       await update.downloadAndInstall((event) => {
@@ -113,6 +131,7 @@ export const useAppUpdater = () => {
         ...current,
         status: 'error',
         error: errorMessage(error),
+        overlay: false,
       }));
     }
   }, [state.status]);
@@ -120,7 +139,7 @@ export const useAppUpdater = () => {
   useEffect(() => {
     if (automaticCheckStarted.current) return;
     automaticCheckStarted.current = true;
-    void checkForUpdates();
+    void checkForUpdates({ visual: false });
   }, [checkForUpdates]);
 
   return {

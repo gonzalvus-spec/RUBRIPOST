@@ -1,5 +1,5 @@
 export interface HistorialEntrada {
-  eid?: string | null;
+  project_id?: string | null;
   usuario: string;
   accion: string;
   entidad: string;
@@ -24,7 +24,15 @@ export const filterHistory = (entries: HistorialEntrada[], filters: HistoryFilte
     if (filters.user && entry.usuario !== filters.user) return false;
     if (filters.entity && entry.entidad !== filters.entity) return false;
     if (filters.days && !(new Date(entry.fecha).getTime() >= now - filters.days * 86_400_000)) return false;
-    return !term || [entry.usuario, entry.accion, entry.nombre, entry.detalle, entry.entidad]
+    return !term || [
+      entry.project_id,
+      entry.usuario,
+      entry.accion,
+      entry.entidad,
+      entry.entidad_id,
+      entry.nombre,
+      entry.detalle,
+    ]
       .some((value) => value?.toLocaleLowerCase().includes(term));
   }).sort((a, b) => (Date.parse(b.fecha) || 0) - (Date.parse(a.fecha) || 0));
 };

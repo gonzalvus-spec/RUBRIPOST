@@ -29,18 +29,13 @@ export interface CambioAuditado {
  * registro falla solo se avisa por consola.
  */
 export const registrarCambio = (cambio: CambioAuditado): void => {
-  // La organización de carpetas/colecciones es estado de navegación, no una
-  // actividad relevante del workspace. Este filtro central también cubre
-  // futuras operaciones sobre subcolecciones.
-  if (cambio.entidad === 'collection') return;
-
   const usuario = useAuthStore.getState().sesion?.usuario;
   if (!usuario) return;
 
   void invoke('registrar_historial', {
     payload: {
       usuario,
-      eid: cambio.eid ?? useApiStore.getState().eid,
+      project_id: cambio.eid ?? useApiStore.getState().eid,
       accion: cambio.accion,
       entidad: cambio.entidad,
       entidad_id: cambio.entidadId ?? null,

@@ -287,6 +287,9 @@
 .historial-event[open] .historial-expand { transform: rotate(180deg); }
 .historial-event-expanded { padding: 7px 16px 12px 124px; background: rgba(255,255,255,.015); }
 .historial-event-expanded small { color: var(--rubri-text-muted); font-size: .67rem; }
+.historial-event-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 18px; margin-top: 8px; }
+.historial-event-fields small { min-width: 0; overflow-wrap: anywhere; }
+.historial-event-fields b { color: var(--rubri-text-secondary); }
 .historial-event-expanded h4 { margin: 0 0 4px; font-size: .78rem; }
 .historial-event-expanded .historial-event-detail { margin: 3px 0 6px; }
 .historial-footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 12px 24px; border-top: 1px solid var(--rubri-border-soft); color: var(--rubri-text-muted); font-size: .7rem; }
@@ -348,4 +351,5 @@
   .historial-event.compact summary .historial-entidad { display: none; }
   .historial-event-main { flex-direction: column; gap: 1px; padding-block: 3px; }
   .historial-event-expanded { padding-left: 112px; }
+  .historial-event-fields { grid-template-columns: 1fr; }
 }

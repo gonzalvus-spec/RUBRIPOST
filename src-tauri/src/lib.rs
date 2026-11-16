@@ -51,20 +51,6 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .setup(|_app| {
-            // El historial se conserva 30 días: al arrancar se borran las
-            // entradas más antiguas para que la colección no crezca sin límite.
-            tauri::async_runtime::spawn(async {
-                match auth::purgar_historial_antiguo().await {
-                    Ok(0) => {}
-                    Ok(total) => {
-                        log::info!("Historial: {total} entrada(s) con más de 30 días eliminadas")
-                    }
-                    Err(error) => log::warn!("No se pudo purgar el historial: {error}"),
-                }
-            });
-            Ok(())
-        })
         .invoke_handler(tauri::generate_handler![
             save_export_json,
             save_api_request_full,

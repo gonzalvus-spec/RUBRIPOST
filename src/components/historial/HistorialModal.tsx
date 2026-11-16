@@ -44,6 +44,8 @@ const iconoEntidad: Record<string, string> = {
 export const HistorialModal = ({ onClose }: HistorialModalProps) => {
   const sesion = useAuthStore((state) => state.sesion);
   const eid = useApiStore((state) => state.eid);
+  const proyectos = useApiStore((state) => state.proyectos);
+  const proyectoActivo = proyectos.find((proyecto) => proyecto.codigo === eid);
 
   const [entradas, setEntradas] = useState<HistorialEntrada[]>([]);
   const [cargando, setCargando] = useState(false);
@@ -66,7 +68,7 @@ export const HistorialModal = ({ onClose }: HistorialModalProps) => {
     setError(null);
     try {
       const datos = await invoke<HistorialEntrada[]>('listar_historial', {
-        filtro: { eid, usuario: null, limit: 300 },
+        filtro: { project_id: eid },
       });
       setEntradas(datos);
     } catch (problema) {
@@ -147,7 +149,10 @@ export const HistorialModal = ({ onClose }: HistorialModalProps) => {
             <Clock size={16} />
             <div>
               <h2>Historial de cambios</h2>
-              <p>Proyecto <b>{eid}</b> · Historial exclusivo de este proyecto · 30 días</p>
+              <p>
+                Proyecto <b>{proyectoActivo?.nombre || eid}</b>
+                {proyectoActivo?.nombre ? ` · ${eid}` : ''} · Todos sus cambios sin exclusiones
+              </p>
             </div>
           </div>
           <div className="historial-head-actions">
@@ -286,7 +291,14 @@ export const HistorialModal = ({ onClose }: HistorialModalProps) => {
                     <div className="historial-event-expanded">
                       {entrada.nombre && <h4>{entrada.nombre}</h4>}
                       <p className="historial-event-detail">{entrada.detalle || 'Sin detalles adicionales.'}</p>
-                      <small>{entrada.usuario} · {formatearFecha(entrada.fecha)}</small>
+                      <div className="historial-event-fields">
+                        <small><b>Usuario:</b> {entrada.usuario}</small>
+                        <small><b>Acción:</b> {entrada.accion}</small>
+                        <small><b>Entidad:</b> {iconoEntidad[entrada.entidad] ?? entrada.entidad}</small>
+                        <small><b>ID:</b> {entrada.entidad_id || '—'}</small>
+                        <small><b>Proyecto:</b> {entrada.project_id || eid}</small>
+                        <small><b>Fecha:</b> {formatearFecha(entrada.fecha)}</small>
+                      </div>
                     </div>
                   </details>
                 );
@@ -294,7 +306,7 @@ export const HistorialModal = ({ onClose }: HistorialModalProps) => {
             </section>
           ))}
         </div>
-        <footer className="historial-footer"><span>{visibles.length} de {entradas.length} cambios cargados · Proyecto {eid}</span><span>Pulsa un cambio para ver detalles · Hasta 300 recientes</span></footer>
+        <footer className="historial-footer"><span>{visibles.length} de {entradas.length} registros · Proyecto {eid}</span><span>Pulsa un cambio para ver todos sus campos</span></footer>
       </div>
     </div>
   );

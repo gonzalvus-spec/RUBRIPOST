@@ -1,5 +1,6 @@
 import clsx from 'clsx';
 
+import packageInfo from '../../../../package.json';
 import { useApiStore } from '../../../store/apiStore';
 import type { ResponseStatus } from '../types';
 import './RubriStatusBar.css';
@@ -56,7 +57,7 @@ export const RubriStatusBar = ({ sending, status }: RubriStatusBarProps) => {
             : isWorkspaceCached ? 'Caché local · sincronizando' : lastSyncAt ? 'Conectado' : 'Conectando…'}
         </span>
         <span className="statusbar-sep" />
-        <span>v0.1.3</span>
+        <span>v{packageInfo.version}</span>
       </div>
     </footer>
   );

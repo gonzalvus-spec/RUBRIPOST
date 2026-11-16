@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import clsx from 'clsx';
+import { invoke } from '@tauri-apps/api/core';
 
 import '../../App.css';
 import './RubriApiView.css';
@@ -34,6 +35,7 @@ import { RubriCookiesModal } from '../cookies/RubriCookiesModal';
 import { RubriProyectosModal } from '../proyectos/RubriProyectosModal';
 import { HistorialModal } from '../historial/HistorialModal';
 import { ProfileModal } from '../auth/ProfileModal';
+import { SplashScreen, useSplashGate } from '../splash/SplashScreen';
 import { useAuthStore } from '../../store/authStore';
 import {
   CLOSED_MODAL,
@@ -57,6 +59,9 @@ const RubriBodyPanel = lazy(() => import('./panels/RubriBodyPanel').then((module
  */
 export const RubriApiView = () => {
   const updater = useAppUpdater();
+  const [initialDataReady, setInitialDataReady] = useState(false);
+  const [initialStage, setInitialStage] = useState<'connecting' | 'projects' | 'workspace' | 'ready'>('connecting');
+  const initialSplash = useSplashGate(initialDataReady, 1400);
 
   // Draft + persistencia (Zustand)
   const eid = useApiStore((state) => state.eid);
@@ -627,26 +632,38 @@ export const RubriApiView = () => {
   useEffect(() => {
     let active = true;
     void (async () => {
-      const initialEid = useApiStore.getState().eid;
-      // La lista de carpetas no espera a los conteos de todos los proyectos.
-      const [lista] = await Promise.all([
-        refreshProyectos(),
-        refreshFromMongo({ silent: true, readOnly: true }),
-      ]);
-      const activo = useApiStore.getState().eid;
-      if (!active || activo !== initialEid) return;
+      try {
+        const initialEid = useApiStore.getState().eid;
+        setInitialStage('projects');
+        // Proyectos, workspace e historial se inicializan en paralelo.
+        const [lista] = await Promise.all([
+          refreshProyectos(),
+          refreshFromMongo({ silent: true, readOnly: true }),
+          invoke('listar_historial', { filtro: { project_id: initialEid } }).catch((error) => {
+            console.warn('No se pudo precargar el historial inicial', error);
+          }),
+        ]);
+        const activo = useApiStore.getState().eid;
+        if (!active || activo !== initialEid) return;
 
-      if (lista.length > 0 && !lista.some((proyecto) => proyecto.codigo === activo)) {
-        // El proyecto recordado ya no existe (se borró en otra PC): se abre otro.
-        await cambiarProyecto(lista[0].codigo);
-      } else if (lista.some((proyecto) => proyecto.codigo === activo) && useApiStore.getState().collections.length === 0 && !useApiStore.getState().lastError) {
-        await refreshFromMongo({ silent: true });
-      }
+        setInitialStage('workspace');
+        if (lista.length > 0 && !lista.some((proyecto) => proyecto.codigo === activo)) {
+          // El proyecto recordado ya no existe (se borró en otra PC): se abre otro.
+          await cambiarProyecto(lista[0].codigo);
+        } else if (lista.some((proyecto) => proyecto.codigo === activo) && useApiStore.getState().collections.length === 0 && !useApiStore.getState().lastError) {
+          await refreshFromMongo({ silent: true });
+        }
 
-      const error = useApiStore.getState().lastError;
-      if (active && error) {
-        if (useApiStore.getState().collections.length > 0) notify.warning('Mostrando colecciones guardadas en este equipo', 'No se pudo sincronizar con MongoDB. Puedes volver a intentar con Refrescar.');
-        else void alertError('No se pudo conectar a MongoDB', error);
+        const error = useApiStore.getState().lastError;
+        if (active && error) {
+          if (useApiStore.getState().collections.length > 0) notify.warning('Mostrando colecciones guardadas en este equipo', 'No se pudo sincronizar con MongoDB. Puedes volver a intentar con Refrescar.');
+          else void alertError('No se pudo conectar a MongoDB', error);
+        }
+      } finally {
+        if (active) {
+          setInitialStage('ready');
+          setInitialDataReady(true);
+        }
       }
     })();
 
@@ -754,9 +771,39 @@ export const RubriApiView = () => {
   // -------------------------------------------------------------------------
 
   const bodyBytes = new TextEncoder().encode(body).length;
+  const initialStatus = initialStage === 'connecting'
+    ? 'Conectando con la base de datos...'
+    : initialStage === 'projects'
+      ? 'Cargando proyectos, colecciones e historial...'
+      : initialStage === 'workspace'
+        ? 'Preparando entorno de trabajo...'
+        : 'Entorno preparado';
+  const initialProgress = initialStage === 'connecting' ? 14 : initialStage === 'projects' ? 46 : initialStage === 'workspace' ? 82 : 100;
+  const updateVisible = updater.overlay && ['checking', 'downloading', 'installing'].includes(updater.status);
+  const updateStatus = updater.status === 'checking'
+    ? 'Buscando actualizaciones...'
+    : updater.status === 'downloading'
+      ? `Descargando actualización (${updater.progress}%)...`
+      : 'Instalando nueva versión y reiniciando...';
 
   return (
     <div className="rubri-app">
+      {initialSplash.visible && (
+        <SplashScreen
+          status={initialStatus}
+          progress={initialProgress}
+          indeterminate={!initialDataReady && initialStage === 'connecting'}
+          leaving={initialSplash.leaving}
+        />
+      )}
+      {updateVisible && (
+        <SplashScreen
+          mode="update"
+          status={updateStatus}
+          progress={updater.status === 'checking' ? 12 : updater.progress}
+          indeterminate={updater.status === 'checking'}
+        />
+      )}
       <RubriTopbar
         updater={updater}
         onOpenProfile={() => setPerfilAbierto(true)}
@@ -831,6 +878,8 @@ export const RubriApiView = () => {
               onNewRequest={() => void handleNewRequest()}
               onNewCollection={openCollectionModal}
               onOpenCollection={(collectionId) => void handleNewRequestIn(collectionId)}
+              onOpenRequest={(request) => void handleLoadSaved(request)}
+              onCreateProject={() => abrirProyectos('crear')}
               onOpenHistory={() => setHistorialAbierto(true)}
               onOpenCookies={() => setCookiesAbierto(true)}
               onRefresh={() => void refreshFromMongo()}

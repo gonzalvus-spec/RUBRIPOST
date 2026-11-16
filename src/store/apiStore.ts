@@ -1171,6 +1171,14 @@ export const useApiStore = create<ApiState>()((set, get) => {
             ids: orderedIds,
           },
         });
+        registrarCambio({
+          eid: state.eid,
+          accion: 'Reordenó requests',
+          entidad: 'request',
+          entidadId: coleccionId,
+          nombre: state.collections.find((item) => item._id === coleccionId)?.nombre ?? null,
+          detalle: `${orderedIds.length} request(s) reordenadas`,
+        });
         // Actualizar el borrador solo al confirmar la escritura; si falla,
         // no queda apuntando a otra colección ni pierde ediciones recientes.
         set((current) => {
@@ -1298,6 +1306,14 @@ export const useApiStore = create<ApiState>()((set, get) => {
               : 'Convertida en colección principal',
           });
           notify.success(parentId ? 'Colección convertida en subcolección' : 'Ahora es una colección principal');
+        } else if (orderChanged) {
+          registrarCambio({
+            eid: source.eid,
+            accion: 'Reordenó colección',
+            entidad: 'collection',
+            entidadId: id,
+            nombre: source.nombre,
+          });
         }
         // Sin refresco inmediato: el estado local ya es el definitivo y el
         // siguiente sondeo sincroniza sin reordenar ni repintar el árbol.
@@ -1475,6 +1491,12 @@ export const useApiStore = create<ApiState>()((set, get) => {
       try {
         await invoke<void>('reorder_api_collections', {
           payload: { eid: state.eid, ids: orderedIds },
+        });
+        registrarCambio({
+          eid: state.eid,
+          accion: 'Reordenó colecciones',
+          entidad: 'collection',
+          detalle: `${orderedIds.length} colección(es) reordenadas`,
         });
         await get().refreshFromMongo({ silent: true, background: true });
       } catch (error) {
