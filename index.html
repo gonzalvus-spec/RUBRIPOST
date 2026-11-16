@@ -5,10 +5,29 @@
     <link rel="icon" type="image/png" href="/src/assets/rubrifact-logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RUBRIFACT API Client</title>
+    <style>
+      html, body, #root { min-height: 100%; margin: 0; }
+      body { background: #121212; }
+      .html-boot {
+        display: grid; min-height: 100vh; place-items: center; color: #fff;
+        background: #121212; font-family: Inter, "Segoe UI", system-ui, sans-serif;
+      }
+      .html-boot > div {
+        width: min(390px, calc(100vw - 64px)); padding: 28px; text-align: center;
+        border: 1px solid #333; border-radius: 12px; background: #1e1e1e;
+        box-shadow: 0 20px 55px rgba(0,0,0,.35);
+      }
+      .html-boot strong { display: block; letter-spacing: 1.4px; }
+      .html-boot small { display: block; margin-top: 8px; color: #a0a0a0; }
+    </style>
   </head>
 
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <main class="html-boot" role="status">
+        <div><strong>RUBRIPOST</strong><small>Iniciando aplicación…</small></div>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

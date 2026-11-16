@@ -1,7 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 
 import { useAuthStore } from '../store/authStore';
-import { useApiStore } from '../store/apiStore';
 
 /** Entidad afectada por un cambio registrado en la bitácora. */
 export type EntidadAuditada =
@@ -13,7 +12,7 @@ export type EntidadAuditada =
 
 export interface CambioAuditado {
   /** Proyecto capturado al iniciar una operación asíncrona. */
-  eid?: string;
+  eid: string;
   /** Acción en pasado: "Creó request", "Eliminó colección"... */
   accion: string;
   entidad: EntidadAuditada;
@@ -35,7 +34,7 @@ export const registrarCambio = (cambio: CambioAuditado): void => {
   void invoke('registrar_historial', {
     payload: {
       usuario,
-      project_id: cambio.eid ?? useApiStore.getState().eid,
+      project_id: cambio.eid,
       accion: cambio.accion,
       entidad: cambio.entidad,
       entidad_id: cambio.entidadId ?? null,

@@ -27,12 +27,26 @@ export const useSplashGate = (ready: boolean, minimumMs = 1400): SplashGate => {
     return () => window.clearTimeout(timeout);
   }, [minimumMs]);
 
+  // Ojo: este efecto NO debe contener el temporizador de salida. Si lo hace,
+  // `setLeaving(true)` lo vuelve a ejecutar, React limpia el temporizador
+  // pendiente y el splash queda invisible pero montado para siempre.
   useEffect(() => {
     if (!ready || !minimumElapsed || leaving) return;
     setLeaving(true);
+  }, [ready, minimumElapsed, leaving]);
+
+  useEffect(() => {
+    if (!leaving) return;
     const timeout = window.setTimeout(() => setVisible(false), 420);
     return () => window.clearTimeout(timeout);
-  }, [ready, minimumElapsed, leaving]);
+  }, [leaving]);
+
+  // Válvula de seguridad: nunca dejamos el inicio cubierto por el splash.
+  useEffect(() => {
+    if (!visible) return;
+    const hardStop = window.setTimeout(() => setVisible(false), minimumMs + 6000);
+    return () => window.clearTimeout(hardStop);
+  }, [minimumMs, visible]);
 
   return { visible, leaving };
 };

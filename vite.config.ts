@@ -6,6 +6,9 @@ const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(() => ({
+  // El WebView de Tauri sirve `dist` desde un protocolo propio. Las rutas
+  // relativas funcionan tanto allí como en preview y evitan `/assets/...`.
+  base: "./",
   plugins: [react()],
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

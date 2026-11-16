@@ -1652,7 +1652,7 @@ export const useApiStore = create<ApiState>()((set, get) => {
           payload: { id, cascada },
         });
         registrarCambio({
-          eid: eliminado?.codigo,
+          eid: eliminado?.codigo ?? get().eid,
           accion: 'Eliminó proyecto',
           entidad: 'proyecto',
           entidadId: id,
