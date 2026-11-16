@@ -1,6 +1,6 @@
 [package]
 name = "RubriPost"
-version = "0.1.5"
+version = "0.1.6"
 description = "RUBRIFACT API Client"
 authors = ["RUBRIFACT"]
 edition = "2024"
