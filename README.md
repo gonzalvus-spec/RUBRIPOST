@@ -1,4 +1,4 @@
-![RubriPost — Cliente HTTP de escritorio](assets/rubripost-banner.svg)
+![RubriPost — Cliente HTTP de escritorio](src/assets/rubripost-banner.svg)
 
 # RubriPost · API Client
 
