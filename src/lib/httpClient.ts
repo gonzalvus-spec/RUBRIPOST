@@ -1,5 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 
+import { networkStatus } from '../store/networkStore';
+
 /** Cookie guardada en MongoDB (colección `cookies`). */
 export interface CookieRegistro {
   id: string;
@@ -47,37 +49,45 @@ export const estaEnTauri = (): boolean =>
  * evitar CORS. En el navegador (desarrollo web) cae a `fetch`.
  */
 export const enviarRequest = async (entrada: EnviarRequestInput): Promise<RespuestaHttp> => {
-  if (estaEnTauri()) {
-    return invoke<RespuestaHttp>('enviar_request', {
-      payload: {
-        eid: entrada.eid,
-        metodo: entrada.metodo,
-        url: entrada.url,
-        headers: entrada.headers,
-        body: entrada.body,
-        enviar_cookies: entrada.enviarCookies,
-      },
+  try {
+    if (estaEnTauri()) {
+      const result = await invoke<RespuestaHttp>('enviar_request', {
+        payload: {
+          eid: entrada.eid,
+          metodo: entrada.metodo,
+          url: entrada.url,
+          headers: entrada.headers,
+          body: entrada.body,
+          enviar_cookies: entrada.enviarCookies,
+        },
+      });
+      networkStatus().reportSuccess();
+      return result;
+    }
+
+    // --- Fallback para el navegador (sin cookies reales) -------------------
+    const inicio = performance.now();
+    const respuesta = await fetch(entrada.url, {
+      method: entrada.metodo,
+      headers: entrada.headers,
+      body: entrada.metodo === 'GET' || !entrada.body ? undefined : entrada.body,
     });
+
+    const cuerpo = await respuesta.text();
+    networkStatus().reportSuccess();
+    return {
+      status: respuesta.status,
+      status_text: respuesta.statusText || 'OK',
+      duration_ms: Math.round(performance.now() - inicio),
+      content_type: respuesta.headers.get('content-type') ?? '',
+      body: cuerpo,
+      headers: [...respuesta.headers.entries()].map(([nombre, valor]) => ({ nombre, valor })),
+      cookies: [],
+    };
+  } catch (error) {
+    networkStatus().reportFailure(error);
+    throw error;
   }
-
-  // --- Fallback para el navegador (sin cookies reales) ---------------------
-  const inicio = performance.now();
-  const respuesta = await fetch(entrada.url, {
-    method: entrada.metodo,
-    headers: entrada.headers,
-    body: entrada.metodo === 'GET' || !entrada.body ? undefined : entrada.body,
-  });
-
-  const cuerpo = await respuesta.text();
-  return {
-    status: respuesta.status,
-    status_text: respuesta.statusText || 'OK',
-    duration_ms: Math.round(performance.now() - inicio),
-    content_type: respuesta.headers.get('content-type') ?? '',
-    body: cuerpo,
-    headers: [...respuesta.headers.entries()].map(([nombre, valor]) => ({ nombre, valor })),
-    cookies: [],
-  };
 };
 
 /**

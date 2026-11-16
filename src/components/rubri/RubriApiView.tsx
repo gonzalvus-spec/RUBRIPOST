@@ -6,7 +6,9 @@ import '../../App.css';
 import './RubriApiView.css';
 
 import { alertError, confirmAction, notify } from '../../lib/alerts';
+import { withTimeout } from '../../lib/async';
 import { useAppUpdater } from '../../hooks/useAppUpdater';
+import { browserIsOnline, networkStatus, useNetworkStore } from '../../store/networkStore';
 import {
   MAX_BODY_BYTES,
   collectionSubtreeIds,
@@ -59,6 +61,7 @@ const RubriBodyPanel = lazy(() => import('./panels/RubriBodyPanel').then((module
  */
 export const RubriApiView = () => {
   const updater = useAppUpdater();
+  const isOnline = useNetworkStore((state) => state.isOnline);
   const [initialDataReady, setInitialDataReady] = useState(false);
   const [initialStage, setInitialStage] = useState<'connecting' | 'projects' | 'workspace' | 'ready'>('connecting');
   const initialSplash = useSplashGate(initialDataReady, 1400);
@@ -311,17 +314,45 @@ export const RubriApiView = () => {
       if (!confirmed) return;
     }
     setHistorialAbierto(false);
+    if (!isOnline) {
+      notify.warning(
+        'No hay conexión a internet',
+        'La sesión se cerrará únicamente en este equipo.',
+      );
+    }
+    useApiStore.getState().resetForLogout();
     await cerrarSesion();
-    notify.success('Sesión cerrada', 'Has salido de tu cuenta.');
+    notify.success(
+      'Sesión cerrada',
+      isOnline ? 'Has salido de tu cuenta.' : 'La sesión local se cerró correctamente.',
+    );
   };
 
   const handleSave = () => {
     if (isSaving) return;
+    if (!isOnline) {
+      notify.warning(
+        'No hay conexión a internet',
+        'No es posible guardar en MongoDB mientras trabajas en modo local.',
+      );
+      return;
+    }
     if (!lastSavedId && !nombre.trim()) {
       openNameModal('save', suggestName(nombre, url));
       return;
     }
     void saveToMongo();
+  };
+
+  const handleRefresh = () => {
+    if (!browserIsOnline()) {
+      notify.warning(
+        'No hay conexión a internet',
+        'Trabajando en modo local. No se puede sincronizar con MongoDB.',
+      );
+      return;
+    }
+    void refreshFromMongo();
   };
 
   const buildRequestHeaders = (): Record<string, string> => {
@@ -639,7 +670,11 @@ export const RubriApiView = () => {
         const [lista] = await Promise.all([
           refreshProyectos(),
           refreshFromMongo({ silent: true, readOnly: true }),
-          invoke('listar_historial', { filtro: { project_id: initialEid } }).catch((error) => {
+          withTimeout(
+            invoke('listar_historial', { filtro: { project_id: initialEid } }),
+            9_000,
+          ).catch((error) => {
+            networkStatus().reportFailure(error);
             console.warn('No se pudo precargar el historial inicial', error);
           }),
         ]);
@@ -656,8 +691,13 @@ export const RubriApiView = () => {
 
         const error = useApiStore.getState().lastError;
         if (active && error) {
-          if (useApiStore.getState().collections.length > 0) notify.warning('Mostrando colecciones guardadas en este equipo', 'No se pudo sincronizar con MongoDB. Puedes volver a intentar con Refrescar.');
-          else void alertError('No se pudo conectar a MongoDB', error);
+          if (!networkStatus().isOnline) {
+            console.warn('Inicio en modo local: MongoDB no está disponible', error);
+          } else if (useApiStore.getState().collections.length > 0) {
+            notify.warning('Mostrando colecciones guardadas en este equipo', 'No se pudo sincronizar con MongoDB. Puedes volver a intentar con Refrescar.');
+          } else {
+            void alertError('No se pudo conectar a MongoDB', error);
+          }
         }
       } finally {
         if (active) {
@@ -670,6 +710,7 @@ export const RubriApiView = () => {
     // Sincronización automática: otra PC que guarde en la misma MongoDB se
     // refleja aquí en segundos sin pisar ediciones locales sin guardar.
     const syncNow = () => {
+      if (!browserIsOnline()) return;
       void refreshFromMongo({ silent: true, background: true, sync: true });
     };
 
@@ -680,12 +721,14 @@ export const RubriApiView = () => {
     };
 
     window.addEventListener('focus', syncNow);
+    window.addEventListener('online', syncNow);
     document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
       active = false;
       window.clearInterval(interval);
       window.removeEventListener('focus', syncNow);
+      window.removeEventListener('online', syncNow);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [refreshFromMongo, refreshProyectos, sesion?.usuario]);
@@ -758,7 +801,7 @@ export const RubriApiView = () => {
         if (!modal.open) void handleSend();
       } else if (key === 'r') {
         event.preventDefault();
-        if (!modal.open) void refreshFromMongo();
+        if (!modal.open) handleRefresh();
       }
     };
 
@@ -831,7 +874,7 @@ export const RubriApiView = () => {
         onCloseTab={(id) => void closeTab(id)}
         onCloseDraft={() => void closeDraft()}
         onNewRequest={() => void handleNewRequest()}
-        onRefresh={() => void refreshFromMongo()}
+        onRefresh={handleRefresh}
       />
 
       <div className="rubri-layout">
@@ -882,7 +925,7 @@ export const RubriApiView = () => {
               onCreateProject={() => abrirProyectos('crear')}
               onOpenHistory={() => setHistorialAbierto(true)}
               onOpenCookies={() => setCookiesAbierto(true)}
-              onRefresh={() => void refreshFromMongo()}
+              onRefresh={handleRefresh}
             />
           ) : (
             <div className="request-view">

@@ -29,6 +29,7 @@ use once_cell::sync::OnceCell as SyncOnceCell;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::sync::OnceCell;
+use tokio::time::{Duration, timeout};
 
 // ---------------------------------------------------------------------------
 // Constantes y estado global
@@ -43,6 +44,8 @@ const ENC_PREFIX: &str = "enc:v1:";
 // Clave estable para que todas las instalaciones lean los secretos compartidos
 // sin depender de configuración externa.
 const APP_ENCRYPTION_KEY: &str = "rubrifact-dev-key-change-me-2026";
+const MONGO_CONNECT_TIMEOUT: Duration = Duration::from_secs(6);
+const MONGO_SERVER_SELECTION_TIMEOUT: Duration = Duration::from_secs(8);
 
 /// Discriminador de documentos dentro de `api_requests`.
 const TIPO_REQUEST: &str = "request";
@@ -398,18 +401,26 @@ pub async fn get_client() -> Result<&'static Client, String> {
 
             log::info!("Conectando a MongoDB (inicialización única del pool)...");
 
-            let mut options = mongodb::options::ClientOptions::parse(&uri)
+            let mut options = timeout(
+                MONGO_CONNECT_TIMEOUT,
+                mongodb::options::ClientOptions::parse(&uri),
+            )
                 .await
+                .map_err(|_| "La conexión a MongoDB agotó el tiempo de espera al resolver el servidor".to_string())?
                 .map_err(|error| format!("URI de MongoDB inválida: {error}"))?;
             options.app_name = Some("rubrifact-api-client".to_string());
+            options.connect_timeout = Some(MONGO_CONNECT_TIMEOUT);
+            options.server_selection_timeout = Some(MONGO_SERVER_SELECTION_TIMEOUT);
 
             let client = Client::with_options(options)
                 .map_err(|error| format!("No se pudo crear el cliente MongoDB: {error}"))?;
 
-            client
-                .database("admin")
-                .run_command(doc! { "ping": 1 })
+            timeout(
+                MONGO_SERVER_SELECTION_TIMEOUT,
+                client.database("admin").run_command(doc! { "ping": 1 }),
+            )
                 .await
+                .map_err(|_| "No se pudo conectar a MongoDB: tiempo de espera agotado".to_string())?
                 .map_err(|error| format!("No se pudo conectar a MongoDB: {error}"))?;
 
             log::info!("Conexión MongoDB establecida. Pool reutilizable listo.");

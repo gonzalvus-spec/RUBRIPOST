@@ -10,6 +10,7 @@ import {
 } from '../lib/collectionHierarchy';
 import { readCollectionCache, writeCollectionCache } from '../lib/collectionCache';
 import { useAuthStore } from './authStore';
+import { browserIsOnline, isNetworkFailure, networkStatus } from './networkStore';
 export { collectionSubtreeIds } from '../lib/collectionHierarchy';
 
 // ---------------------------------------------------------------------------
@@ -470,6 +471,8 @@ export interface ApiState {
   markDirty: () => void;
   resetDirty: () => void;
   clearSavedId: () => void;
+  /** Descarta estado transitorio al cerrar sesión sin borrar la caché offline. */
+  resetForLogout: () => void;
 }
 
 interface DraftSource {
@@ -664,6 +667,13 @@ export const useApiStore = create<ApiState>()((set, get) => {
 
     saveToMongo: async (options = {}) => {
       const state = get();
+      if (!browserIsOnline()) {
+        notify.warning(
+          'No hay conexión a internet',
+          'La petición permanece local hasta que recuperes la conexión.',
+        );
+        return null;
+      }
       if (state.isSaving) return null;
 
       const nombre = (options.nombre ?? state.nombre).trim();
@@ -702,6 +712,7 @@ export const useApiStore = create<ApiState>()((set, get) => {
         const savedId = await invoke<string>('save_api_request_full', {
           payload,
         });
+        networkStatus().reportSuccess();
 
         const nextVersion = options.asNew ? 1 : state.version + 1;
         set((current) => {
@@ -746,9 +757,17 @@ export const useApiStore = create<ApiState>()((set, get) => {
         await get().refreshFromMongo({ silent: true });
         return savedId;
       } catch (error) {
+        networkStatus().reportFailure(error);
         const message = errorMessage(error);
         set({ isSaving: false, lastError: message });
-        notify.error(`Error al guardar: ${message}`);
+        if (isNetworkFailure(error)) {
+          notify.warning(
+            'No hay conexión a internet',
+            'No se pudo guardar en MongoDB. Tus cambios continúan en el editor.',
+          );
+        } else {
+          notify.error(`Error al guardar: ${message}`);
+        }
         return null;
       }
     },
@@ -788,6 +807,7 @@ export const useApiStore = create<ApiState>()((set, get) => {
         const workspace = await invoke<ApiWorkspace>(options.readOnly ? 'get_api_workspace_snapshot' : 'get_api_workspace', {
           filter: { eid: state.eid, limit: 200 },
         });
+        networkStatus().reportSuccess();
         if (requestId !== syncSequence || get().eid !== state.eid || (useAuthStore.getState().sesion?.usuario ?? '') !== user) return get().savedRequests;
 
         let remoteDeleted = false;
@@ -911,11 +931,19 @@ export const useApiStore = create<ApiState>()((set, get) => {
         }
         return workspace.requests;
       } catch (error) {
+        networkStatus().reportFailure(error);
         if (requestId !== syncSequence || get().eid !== state.eid || (useAuthStore.getState().sesion?.usuario ?? '') !== user) return get().savedRequests;
         const message = errorMessage(error);
         set({ isRefreshing: false, lastError: message });
         if (!options.silent) {
-          notify.error('No se pudo sincronizar con MongoDB', message);
+          if (isNetworkFailure(error)) {
+            notify.warning(
+              'No hay conexión a internet',
+              'Trabajando en modo local. No se pudo sincronizar con MongoDB.',
+            );
+          } else {
+            notify.error('No se pudo sincronizar con MongoDB', message);
+          }
         }
         return [];
       } finally {
@@ -1515,6 +1543,7 @@ export const useApiStore = create<ApiState>()((set, get) => {
     refreshProyectos: async () => {
       try {
         let lista = await invoke<ApiProyecto[]>('listar_proyectos');
+        networkStatus().reportSuccess();
 
         // Primer arranque: el proyecto principal necesita su
         // ficha para aparecer en el selector. Solo se crea cuando no hay
@@ -1534,6 +1563,7 @@ export const useApiStore = create<ApiState>()((set, get) => {
         set({ proyectos: lista });
         return lista;
       } catch (error) {
+        networkStatus().reportFailure(error);
         // Sin Tauri (vista web) o sin MongoDB: el selector queda vacío y la
         // app sigue funcionando con el proyecto por defecto.
         console.warn('No se pudieron cargar los proyectos', error);
@@ -1679,6 +1709,40 @@ export const useApiStore = create<ApiState>()((set, get) => {
     markDirty: () => set({ isDirty: true }),
     resetDirty: () => set({ isDirty: false }),
     clearSavedId: () => set({ lastSavedId: null, version: 1 }),
+    resetForLogout: () => {
+      ++syncSequence;
+      workspaceRefresh = null;
+      workspaceOwner = '';
+      set({
+        nombre: '',
+        contexto: getContextFromUrl(DEFAULT_URL),
+        metodo: DEFAULT_METHOD,
+        url: DEFAULT_URL,
+        body: DEFAULT_BODY,
+        headerRows: DEFAULT_HEADERS.map((row) => ({ ...row })),
+        queryDescripciones: {},
+        auth: defaultAuth(),
+        httpInfo: { status_code: 0, duration_ms: 0 },
+        version: 1,
+        coleccionId: null,
+        currentRequest: null,
+        collections: [],
+        isWorkspaceCached: false,
+        proyectos: [],
+        savedRequests: [],
+        activeCollectionId: null,
+        isDirty: false,
+        isSaving: false,
+        isRefreshing: false,
+        deletingId: null,
+        busyCollectionId: null,
+        lastSavedId: null,
+        lastError: null,
+        lastSyncAt: null,
+        lastSaveAt: 0,
+        revision: 0,
+      });
+    },
   };
 });
 

@@ -3,7 +3,9 @@ import { useEffect, useRef, useState } from 'react';
 import RubriApiView from './components/rubri/RubriApiView';
 import LoginView from './components/auth/LoginView';
 import { SplashScreen, useSplashGate } from './components/splash/SplashScreen';
+import { OfflineBanner } from './components/system/OfflineBanner';
 import { useAuthStore } from './store/authStore';
+import { useNetworkStore } from './store/networkStore';
 
 /**
  * Shell de la aplicación: sin sesión se muestra el login y, al ingresar,
@@ -12,6 +14,7 @@ import { useAuthStore } from './store/authStore';
 function App() {
   const sesion = useAuthStore((state) => state.sesion);
   const comprobarUsuarios = useAuthStore((state) => state.comprobarUsuarios);
+  const setBrowserStatus = useNetworkStore((state) => state.setBrowserStatus);
   const [authReady, setAuthReady] = useState(Boolean(sesion));
   const authCheckStarted = useRef(false);
   const authSplash = useSplashGate(authReady, 1300);
@@ -22,18 +25,41 @@ function App() {
     void comprobarUsuarios().finally(() => setAuthReady(true));
   }, [comprobarUsuarios, sesion]);
 
+  useEffect(() => {
+    const handleOnline = () => {
+      setBrowserStatus(true);
+      if (!useAuthStore.getState().sesion) void comprobarUsuarios();
+    };
+    const handleOffline = () => setBrowserStatus(false);
+    setBrowserStatus(navigator.onLine);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [comprobarUsuarios, setBrowserStatus]);
+
   if (!sesion && authSplash.visible) {
     return (
-      <SplashScreen
-        status={authReady ? 'Preparando acceso seguro...' : 'Conectando con la base de datos...'}
-        progress={authReady ? 100 : 24}
-        indeterminate={!authReady}
-        leaving={authSplash.leaving}
-      />
+      <>
+        <OfflineBanner />
+        <SplashScreen
+          status={authReady ? 'Preparando acceso seguro...' : 'Conectando con la base de datos...'}
+          progress={authReady ? 100 : 24}
+          indeterminate={!authReady}
+          leaving={authSplash.leaving}
+        />
+      </>
     );
   }
 
-  return sesion ? <RubriApiView /> : <LoginView />;
+  return (
+    <>
+      <OfflineBanner />
+      {sesion ? <RubriApiView /> : <LoginView />}
+    </>
+  );
 }
 
 export default App;

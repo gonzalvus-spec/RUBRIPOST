@@ -2,6 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { check, type Update } from '@tauri-apps/plugin-updater';
 
+import { withTimeout } from '../lib/async';
+import { networkStatus } from '../store/networkStore';
+
 export type AppUpdaterStatus =
   | 'idle'
   | 'checking'
@@ -60,7 +63,12 @@ export const useAppUpdater = () => {
       overlay: visual,
     }));
     try {
-      const update = await check();
+      const update = await withTimeout(
+        check(),
+        10_000,
+        'La búsqueda de actualizaciones agotó el tiempo de espera',
+      );
+      networkStatus().reportSuccess();
       updateRef.current = update;
 
       if (!update) {
@@ -78,6 +86,7 @@ export const useAppUpdater = () => {
       });
       return 'available';
     } catch (error) {
+      networkStatus().reportFailure(error);
       console.warn('No se pudo buscar actualizaciones', error);
       setState({
         ...INITIAL_STATE,

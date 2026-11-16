@@ -1,0 +1,27 @@
+﻿.recovery-screen {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  background: var(--rubri-bg-dark);
+  color: var(--rubri-text-primary);
+}
+
+.recovery-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(520px, 100%);
+  padding: 30px;
+  border: 1px solid var(--rubri-border);
+  border-radius: var(--rubri-radius-lg);
+  background: var(--rubri-bg-panel);
+  box-shadow: 0 20px 55px rgba(0, 0, 0, .35);
+  text-align: center;
+}
+
+.recovery-icon { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 12px; background: rgba(245,158,11,.12); color: #f59e0b; }
+.recovery-card h1 { margin: 18px 0 8px; font-size: 1.2rem; }
+.recovery-card p { margin: 0; color: var(--rubri-text-secondary); font-size: .8rem; line-height: 1.55; }
+.recovery-card small { max-width: 100%; margin-top: 14px; overflow-wrap: anywhere; color: var(--rubri-text-muted); font-family: var(--rubri-font-mono); }
+.recovery-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px; margin-top: 22px; }

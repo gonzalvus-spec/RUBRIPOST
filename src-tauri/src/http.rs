@@ -8,7 +8,7 @@
 //! - La UI también puede crear, editar y eliminar cookies a mano.
 
 use std::collections::HashMap;
-use std::time::Instant;
+use std::time::{Duration as StdDuration, Instant};
 
 use chrono::{DateTime, Duration, Utc};
 use mongodb::bson::{Document, doc, oid::ObjectId};
@@ -493,6 +493,8 @@ pub async fn enviar_request(payload: EnviarRequestPayload) -> Result<RespuestaHt
 
     let cliente = reqwest::Client::builder()
         .user_agent("rubrifact-api-client/0.1")
+        .connect_timeout(StdDuration::from_secs(7))
+        .timeout(StdDuration::from_secs(30))
         .build()
         .map_err(|error| format!("No se pudo crear el cliente HTTP: {error}"))?;
 

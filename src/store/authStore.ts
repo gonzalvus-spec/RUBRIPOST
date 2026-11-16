@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 
+import { withTimeout } from '../lib/async';
+import { browserIsOnline, isNetworkFailure, networkStatus } from './networkStore';
+
 /** Usuario autenticado (datos públicos devueltos por el backend). */
 export interface SesionUsuario {
   id: string;
@@ -38,6 +41,19 @@ const mensaje = (error: unknown): string => {
  */
 const SESION_KEY = 'rubripost.sesion';
 
+export const clearLocalSession = (): void => {
+  try {
+    window.localStorage.removeItem(SESION_KEY);
+  } catch (error) {
+    console.warn('No se pudo eliminar la sesión local', error);
+  }
+  try {
+    window.sessionStorage.clear();
+  } catch (error) {
+    console.warn('No se pudo limpiar el almacenamiento temporal', error);
+  }
+};
+
 const esSesionValida = (valor: unknown): valor is SesionUsuario => {
   if (typeof valor !== 'object' || valor === null) return false;
   const registro = valor as Record<string, unknown>;
@@ -56,8 +72,11 @@ const leerSesionGuardada = (): SesionUsuario | null => {
     const crudo = window.localStorage.getItem(SESION_KEY);
     if (!crudo) return null;
     const datos: unknown = JSON.parse(crudo);
-    return esSesionValida(datos) ? datos : null;
+    if (esSesionValida(datos)) return datos;
+    clearLocalSession();
+    return null;
   } catch {
+    clearLocalSession();
     return null;
   }
 };
@@ -67,7 +86,7 @@ const guardarSesion = (sesion: SesionUsuario | null): void => {
     if (sesion) {
       window.localStorage.setItem(SESION_KEY, JSON.stringify(sesion));
     } else {
-      window.localStorage.removeItem(SESION_KEY);
+      clearLocalSession();
     }
   } catch (error) {
     console.warn('No se pudo guardar la sesión en el equipo', error);
@@ -95,34 +114,55 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
   error: null,
 
   comprobarUsuarios: async () => {
+    if (!browserIsOnline()) {
+      set({ hayUsuarios: true, error: null });
+      return;
+    }
     try {
-      const hay = await invoke<boolean>('hay_usuarios');
+      const hay = await withTimeout(invoke<boolean>('hay_usuarios'), 8_000);
+      networkStatus().reportSuccess();
       set({ hayUsuarios: hay });
     } catch (error) {
-      // Si MongoDB no responde, el login mostrará el error al intentar entrar.
-      set({ hayUsuarios: true, error: mensaje(error) });
+      networkStatus().reportFailure(error);
+      set({
+        hayUsuarios: true,
+        error: isNetworkFailure(error) ? null : mensaje(error),
+      });
     }
   },
 
   login: async (usuario, password) => {
     set({ cargando: true, error: null });
+    if (!browserIsOnline()) {
+      set({ cargando: false, error: 'No hay conexión a internet' });
+      return false;
+    }
     try {
-      const sesion = await invoke<SesionUsuario>('login', {
+      const sesion = await withTimeout(invoke<SesionUsuario>('login', {
         payload: { usuario, password },
-      });
+      }), 10_000);
+      networkStatus().reportSuccess();
       guardarSesion(sesion);
       set({ sesion, hayUsuarios: true, cargando: false, error: null });
       return true;
     } catch (error) {
-      set({ cargando: false, error: mensaje(error) });
+      networkStatus().reportFailure(error);
+      set({
+        cargando: false,
+        error: isNetworkFailure(error) ? 'No hay conexión a internet' : mensaje(error),
+      });
       return false;
     }
   },
 
   crearUsuario: async (payload) => {
     set({ cargando: true, error: null });
+    if (!browserIsOnline()) {
+      set({ cargando: false, error: 'No hay conexión a internet' });
+      return false;
+    }
     try {
-      const sesion = await invoke<SesionUsuario>('crear_usuario', {
+      const sesion = await withTimeout(invoke<SesionUsuario>('crear_usuario', {
         payload: {
           usuario: payload.usuario,
           nombre: payload.nombre,
@@ -131,7 +171,8 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
           admin_usuario: payload.adminUsuario ?? null,
           admin_password: payload.adminPassword ?? null,
         },
-      });
+      }), 10_000);
+      networkStatus().reportSuccess();
       set({ cargando: false, error: null });
       // El primer administrador queda autenticado directamente.
       if (get().hayUsuarios === false) {
@@ -140,7 +181,11 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
       }
       return true;
     } catch (error) {
-      set({ cargando: false, error: mensaje(error) });
+      networkStatus().reportFailure(error);
+      set({
+        cargando: false,
+        error: isNetworkFailure(error) ? 'No hay conexión a internet' : mensaje(error),
+      });
       return false;
     }
   },
@@ -149,8 +194,12 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
     const actual = get().sesion;
     if (!actual) return false;
     set({ cargando: true, error: null });
+    if (!browserIsOnline()) {
+      set({ cargando: false, error: 'No hay conexión a internet' });
+      return false;
+    }
     try {
-      const sesion = await invoke<SesionUsuario>('update_user_profile', {
+      const sesion = await withTimeout(invoke<SesionUsuario>('update_user_profile', {
         payload: {
           user_id: actual.id,
           usuario: payload.usuario,
@@ -158,25 +207,39 @@ export const useAuthStore = create<AuthState>()((set, get) => ({
           current_password: payload.currentPassword ?? null,
           new_password: payload.newPassword ?? null,
         },
-      });
+      }), 10_000);
+      networkStatus().reportSuccess();
       guardarSesion(sesion);
       set({ sesion, cargando: false, error: null });
       return true;
     } catch (error) {
-      set({ cargando: false, error: mensaje(error) });
+      networkStatus().reportFailure(error);
+      set({
+        cargando: false,
+        error: isNetworkFailure(error) ? 'No hay conexión a internet' : mensaje(error),
+      });
       return false;
     }
   },
 
   cerrarSesion: async () => {
     const usuario = get().sesion?.usuario;
-    guardarSesion(null);
-    set({ sesion: null, error: null });
-    if (!usuario) return;
     try {
-      await invoke('cerrar_sesion', { usuario });
+      // La interfaz y el almacenamiento se limpian de inmediato. El registro
+      // remoto es secundario y nunca puede bloquear el logout local.
+      guardarSesion(null);
+      set({ sesion: null, hayUsuarios: true, cargando: false, error: null });
+      if (!usuario || !networkStatus().isOnline) return;
+      await withTimeout(invoke('cerrar_sesion', { usuario }), 2_500);
+      networkStatus().reportSuccess();
     } catch (error) {
+      networkStatus().reportFailure(error);
       console.warn('No se pudo registrar el cierre de sesión', error);
+    } finally {
+      // Es intencionadamente idempotente: garantiza una sesión limpia incluso
+      // si localStorage o la llamada remota fallan a mitad del proceso.
+      guardarSesion(null);
+      set({ sesion: null, hayUsuarios: true, cargando: false, error: null });
     }
   },
 
