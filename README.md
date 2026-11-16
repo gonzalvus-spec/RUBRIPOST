@@ -1,6 +1,5 @@
 ![RubriPost — Cliente HTTP de escritorio](src/assets/rubripost-banner.svg)
 
-# RubriPost · API Client
 
 Cliente HTTP de escritorio de **Rubrifact (Rubri Systems)** para crear, ejecutar y organizar peticiones API. Desarrollado con **Tauri 2, React 19, TypeScript, Monaco Editor y Zustand**, con datos persistidos en **MongoDB**.
 
