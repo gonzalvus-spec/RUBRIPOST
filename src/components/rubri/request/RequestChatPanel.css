@@ -9,7 +9,7 @@
   overflow: hidden;
   border: 1px solid var(--rubri-border);
   border-radius: var(--rubri-radius-lg);
-  background: linear-gradient(180deg, rgba(25, 31, 28, 0.96), rgba(19, 22, 21, 0.98));
+  background-color: var(--rubri-bg-panel);
   transition: width 180ms ease, border-color 180ms ease;
 }
 
@@ -420,10 +420,12 @@
   height: 18px;
   padding: 0 5px;
   border-radius: 9px;
-  background: rgba(197, 160, 89, 0.18);
-  color: var(--rubri-gold);
+  border: 1px solid rgba(197, 160, 89, 0.5);
+  background-color: var(--rubri-gold);
+  color: var(--rubri-bg-dark);
   font-size: 0.63rem;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 /* --- Layout de la vista de request -------------------------------------- */

@@ -9,6 +9,7 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  background-color: var(--rubri-bg-dark);
 }
 
 
@@ -25,6 +26,7 @@
   min-height: 0;
   padding: 12px 14px 10px;
   overflow: hidden;
+  background-color: var(--rubri-bg-dark);
 }
 
 /* Indicador compartido: cambios sin guardar (topbar, sidebar y cabecera). */

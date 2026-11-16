@@ -166,6 +166,33 @@ export const COLLECTION_COLORS: readonly string[] = [
 
 export const DEFAULT_COLLECTION_COLOR = COLLECTION_COLORS[0];
 
+/**
+ * Conserva referencias de Zustand cuando una sincronización devuelve el mismo
+ * contenido. Así el polling no vuelve a renderizar listas completas cada 5 s.
+ */
+const sameCollections = (
+  current: readonly ApiCollection[],
+  incoming: readonly ApiCollection[],
+): boolean => current.length === incoming.length && current.every((item, index) => {
+  const next = incoming[index];
+  return item._id === next._id
+    && item.updated_at === next.updated_at
+    && item.orden === next.orden
+    && item.parent_id === next.parent_id;
+});
+
+const sameRequests = (
+  current: readonly ApiRequestDocument[],
+  incoming: readonly ApiRequestDocument[],
+): boolean => current.length === incoming.length && current.every((item, index) => {
+  const next = incoming[index];
+  return item._id === next._id
+    && item.updated_at === next.updated_at
+    && item.version === next.version
+    && item.orden === next.orden
+    && item.coleccion_id === next.coleccion_id;
+});
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -883,10 +910,17 @@ export const useApiStore = create<ApiState>()((set, get) => {
             }
           }
 
+          const collections = sameCollections(current.collections, workspace.collections)
+            ? current.collections
+            : workspace.collections;
+          const savedRequests = sameRequests(current.savedRequests, workspace.requests)
+            ? current.savedRequests
+            : workspace.requests;
+
           return {
-            collections: workspace.collections,
+            collections,
             isWorkspaceCached: false,
-            savedRequests: workspace.requests,
+            savedRequests,
             activeCollectionId,
             coleccionId: draft.coleccionId,
             isRefreshing: false,

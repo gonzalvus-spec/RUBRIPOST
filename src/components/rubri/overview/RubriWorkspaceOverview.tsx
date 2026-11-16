@@ -93,7 +93,6 @@ export const RubriWorkspaceOverview = ({
   return (
     <section className="workspace-overview" aria-label="Vista general del proyecto">
       <header className="overview-hero">
-        <div className="overview-hero-glow" aria-hidden="true" />
         <div className="overview-hero-copy">
           <span className="overview-eyebrow"><LayoutDashboard size={13} /> Overview</span>
           <h1>{greeting()}, <span>{sesion?.nombre || sesion?.usuario || 'equipo'}</span></h1>

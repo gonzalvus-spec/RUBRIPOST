@@ -39,7 +39,7 @@
   font-weight: 600;
   letter-spacing: -0.01em;
   outline: none;
-  transition: all 0.16s ease;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 .request-title::placeholder {

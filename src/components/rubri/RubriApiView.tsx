@@ -710,7 +710,7 @@ export const RubriApiView = () => {
     // Sincronización automática: otra PC que guarde en la misma MongoDB se
     // refleja aquí en segundos sin pisar ediciones locales sin guardar.
     const syncNow = () => {
-      if (!browserIsOnline()) return;
+      if (!browserIsOnline() || document.visibilityState !== 'visible') return;
       void refreshFromMongo({ silent: true, background: true, sync: true });
     };
 

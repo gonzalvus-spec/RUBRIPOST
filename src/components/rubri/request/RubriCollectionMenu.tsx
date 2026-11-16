@@ -112,10 +112,7 @@ export const RubriCollectionMenu = ({
         <Folder
           size={14}
           className="crumb-folder-icon"
-          style={{
-            color: activa?.color ?? '#0A8F4E',
-            filter: `drop-shadow(0 0 6px ${activa?.color ?? '#0A8F4E'}55)`,
-          }}
+          style={{ color: activa?.color ?? '#0A8F4E' }}
         />
         <span className="crumb-collection-name">{activa?.nombre ?? 'Sin colección'}</span>
         <ChevronDown size={12} className="crumb-select-arrow" />
@@ -157,12 +154,12 @@ export const RubriCollectionMenu = ({
                     active: esActiva,
                     highlighted: index === resaltado,
                   })}
-                  onMouseEnter={() => setResaltado(index)}
+                  onFocus={() => setResaltado(index)}
                   onClick={() => elegir(collection._id)}
                 >
                   <span
                     className="collection-dot"
-                    style={{ background: collection.color, boxShadow: `0 0 6px ${collection.color}66` }}
+                    style={{ backgroundColor: collection.color }}
                   />
                   <span className="collection-option-name">{collection.nombre}</span>
                   <span className="collection-count">{counts[collection._id] ?? 0}</span>

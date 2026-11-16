@@ -22,16 +22,15 @@
   font-family: inherit;
   cursor: pointer;
   transition:
-    background 0.16s ease,
-    border-color 0.16s ease,
-    box-shadow 0.16s ease;
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
 }
 
 .project-chip:hover,
 .project-chip.open {
   background: rgba(197, 160, 89, 0.15);
   border-color: rgba(197, 160, 89, 0.55);
-  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.32);
 }
 
 .project-chip-dot {
@@ -39,7 +38,6 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  box-shadow: 0 0 8px currentColor;
 }
 
 .project-chip-body {

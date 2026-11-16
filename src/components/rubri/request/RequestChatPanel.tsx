@@ -22,6 +22,7 @@ import {
   updateChatMessage,
   type SharedChatMessage,
 } from '../../../lib/chat';
+import { useChatStore } from '../../../store/chatStore';
 import './RequestChatPanel.css';
 
 interface RequestChatPanelProps {
@@ -63,11 +64,26 @@ export const RequestChatPanel = ({
   const [menuUp, setMenuUp] = useState(false);
   const [mutatingId, setMutatingId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const collapsedRef = useRef(collapsed);
+  const knownMessageIdsRef = useRef<Set<string> | null>(null);
+  const chatKey = eid && requestKey ? `${eid}::${requestKey}` : '';
+  const unreadCount = useChatStore((state) => state.unreadByRequest[chatKey] ?? 0);
+
+  collapsedRef.current = collapsed;
 
   const refresh = useCallback(async (showError = false) => {
     if (!eid || !requestKey) return;
     try {
       const next = await getChatMessages(eid, requestKey);
+      const knownIds = knownMessageIdsRef.current;
+      if (knownIds && collapsedRef.current) {
+        const incomingCount = next.reduce(
+          (count, message) => count + (knownIds.has(message.id) ? 0 : 1),
+          0,
+        );
+        useChatStore.getState().addUnread(`${eid}::${requestKey}`, incomingCount);
+      }
+      knownMessageIdsRef.current = new Set(next.map((message) => message.id));
       setMessages(next);
     } catch (error) {
       console.warn('No se pudo actualizar el chat', error);
@@ -76,17 +92,21 @@ export const RequestChatPanel = ({
   }, [eid, requestKey]);
 
   useEffect(() => {
+    knownMessageIdsRef.current = null;
     setMessages([]);
     setDraft('');
     setEditingId(null);
     setEditDraft('');
     setOpenMenuId(null);
-    if (collapsed) return;
     setLoading(true);
     void refresh(true).finally(() => setLoading(false));
     const interval = window.setInterval(() => void refresh(false), 4000);
     return () => window.clearInterval(interval);
-  }, [collapsed, refresh]);
+  }, [refresh]);
+
+  useEffect(() => {
+    if (!collapsed) useChatStore.getState().clearUnread(chatKey);
+  }, [chatKey, collapsed]);
 
   useEffect(() => {
     if (!openMenuId) return;
@@ -123,6 +143,7 @@ export const RequestChatPanel = ({
         requestName,
         content,
       });
+      knownMessageIdsRef.current?.add(message.id);
       setMessages((current) => current.some((item) => item.id === message.id)
         ? current
         : [...current, message]);
@@ -191,10 +212,20 @@ export const RequestChatPanel = ({
   return (
     <aside className={clsx('request-chat', { collapsed })} aria-label={`Chat de ${requestName || 'la request'}`}>
       {collapsed ? (
-        <button type="button" className="request-chat-rail" onClick={onToggle} title="Expandir chat" aria-label="Expandir chat">
+        <button
+          type="button"
+          className="request-chat-rail"
+          onClick={onToggle}
+          title={unreadCount > 0 ? `Expandir chat · ${unreadCount} mensaje(s) nuevo(s)` : 'Expandir chat'}
+          aria-label={unreadCount > 0 ? `Expandir chat, ${unreadCount} mensaje(s) sin leer` : 'Expandir chat'}
+        >
           <PanelRightOpen size={15} />
           <MessageSquare size={15} />
-          {messages.length > 0 && <span className="request-chat-count">{messages.length}</span>}
+          {unreadCount > 0 && (
+            <span className="request-chat-count" aria-hidden="true">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
           <span className="request-chat-rail-label">Chat</span>
         </button>
       ) : (

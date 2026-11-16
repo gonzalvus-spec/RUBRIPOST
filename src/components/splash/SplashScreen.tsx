@@ -86,19 +86,13 @@ export const SplashScreen = ({
               <stop offset="0%" stopColor="#16a34a" />
               <stop offset="100%" stopColor="#0b4a32" />
             </linearGradient>
-            <filter id="rubriSplashNeon" x="40" y="35" width="160" height="160" filterUnits="userSpaceOnUse">
-              <feGaussianBlur stdDeviation="3.5" result="blur">
-                <animate attributeName="stdDeviation" values="2.5;5.5;2.5" dur="2.6s" repeatCount="indefinite" />
-              </feGaussianBlur>
-              <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-            </filter>
           </defs>
 
           <rect className="rubri-splash-surface" x="1" y="1" width="848" height="228" rx="14" strokeWidth="1.5" />
           <circle className="rubri-splash-halo" cx="120" cy="115" r="115" fill="url(#rubriSplashGlow)" />
           <g className="rubri-splash-cube">
             <polygon points="120,56 168,84 168,146 120,174 72,146 72,84" fill="url(#rubriSplashCube)" />
-            <g filter="url(#rubriSplashNeon)" stroke="#fff" strokeWidth="3.4" strokeLinejoin="round" strokeLinecap="round">
+            <g stroke="#fff" strokeWidth="3.4" strokeLinejoin="round" strokeLinecap="round">
               <polygon points="120,66 156,87 120,108 84,87" fill="none" />
               <polygon points="81,94 115,114 115,158 81,138" fill="none" />
               <polygon points="159,94 125,114 125,158 159,138" fill="none" />

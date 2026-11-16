@@ -15,7 +15,6 @@
   color: #fbbf24;
   box-shadow: 0 12px 32px rgba(0, 0, 0, .38);
   transform: translateX(-50%);
-  backdrop-filter: blur(10px);
 }
 
 .offline-banner > svg { flex: 0 0 auto; }

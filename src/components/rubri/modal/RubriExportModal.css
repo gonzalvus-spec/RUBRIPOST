@@ -1,4 +1,4 @@
-.export-overlay { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 24px; background: rgba(5,12,8,.76); backdrop-filter: blur(4px); }
+.export-overlay { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 24px; background: rgba(5,12,8,.9); }
 .export-panel { display: flex; flex-direction: column; width: min(620px,100%); max-height: 90vh; overflow: hidden; border: 1px solid var(--rubri-border); border-radius: 14px; background: var(--rubri-bg-panel); box-shadow: 0 24px 70px #0008; }
 .export-header { display: flex; align-items: center; gap: 12px; padding: 20px; border-bottom: 1px solid var(--rubri-border-soft); color: var(--rubri-gold); }
 .export-header div { flex: 1; }

@@ -39,8 +39,28 @@ fn load_environment() {
     }
 }
 
+/// Evita frames transparentes por el renderer DMABUF de WebKitGTK en Linux.
+/// Respeta cualquier elección explícita realizada por el usuario.
+#[cfg(target_os = "linux")]
+fn stabilize_linux_webview() {
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        // SAFETY: se ejecuta al comienzo de `run`, antes de crear Tauri/WebKit
+        // o cualquier hilo de la aplicación que pueda leer el entorno.
+        unsafe { std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1") };
+    }
+
+    // No se fuerza WEBKIT_DISABLE_COMPOSITING_MODE: desactivar por completo
+    // la composición degrada scroll y vídeo. El workaround de DMABUF es el
+    // ajuste específico y menos invasivo para WebKitGTK/Mesa en Arch Linux.
+}
+
+#[cfg(not(target_os = "linux"))]
+fn stabilize_linux_webview() {}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    stabilize_linux_webview();
+
     let _ = env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
         .try_init();
 
