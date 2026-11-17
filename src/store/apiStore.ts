@@ -141,6 +141,8 @@ export interface RefreshOptions {
    * Nunca pisa ediciones locales sin guardar.
    */
   sync?: boolean;
+  /** Fuerza una lectura nueva aunque exista un sondeo anterior en vuelo. */
+  force?: boolean;
 }
 
 export interface DraftInput {
@@ -731,6 +733,9 @@ export const useApiStore = create<ApiState>()((set, get) => {
         id: options.asNew ? null : state.lastSavedId,
       };
 
+      // Una lectura iniciada antes de esta escritura ya no puede considerarse
+      // vigente. Se invalida para que no vuelva a publicar datos anteriores.
+      ++syncSequence;
       set({ isSaving: true, lastError: null });
 
       const revisionAtSave = state.revision;
@@ -781,7 +786,8 @@ export const useApiStore = create<ApiState>()((set, get) => {
             : 'Request guardada en la colección',
         );
 
-        await get().refreshFromMongo({ silent: true });
+        // No reutilizar un polling que pudo comenzar antes del guardado.
+        await get().refreshFromMongo({ silent: true, sync: true, force: true });
         return savedId;
       } catch (error) {
         networkStatus().reportFailure(error);
@@ -818,7 +824,7 @@ export const useApiStore = create<ApiState>()((set, get) => {
       const state = get();
       const user = useAuthStore.getState().sesion?.usuario ?? '';
       // Esperar la lectura compartida evita un resultado vacío en montajes simultáneos.
-      if (workspaceRefresh?.user === user && workspaceRefresh.eid === state.eid) return workspaceRefresh.promise;
+      if (!options.force && workspaceRefresh?.user === user && workspaceRefresh.eid === state.eid) return workspaceRefresh.promise;
       // Nunca competir con un guardado o un movimiento de colección en curso.
       if (options.background && (state.isSaving || collectionMovePending > 0)) {
         return state.savedRequests;

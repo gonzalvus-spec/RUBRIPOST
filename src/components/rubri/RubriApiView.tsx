@@ -329,7 +329,10 @@ export const RubriApiView = () => {
   };
 
   const handleSave = () => {
-    if (isSaving) return;
+    // Leer Zustand en el instante exacto del click/atajo evita que Monaco o un
+    // render pendiente hagan decidir con nombre/url/isSaving anteriores.
+    const current = useApiStore.getState();
+    if (current.isSaving) return;
     if (!isOnline) {
       notify.warning(
         'No hay conexión a internet',
@@ -337,8 +340,8 @@ export const RubriApiView = () => {
       );
       return;
     }
-    if (!lastSavedId && !nombre.trim()) {
-      openNameModal('save', suggestName(nombre, url));
+    if (!current.lastSavedId && !current.nombre.trim()) {
+      openNameModal('save', suggestName(current.nombre, current.url));
       return;
     }
     void saveToMongo();
@@ -959,6 +962,7 @@ export const RubriApiView = () => {
                       jsonErrors={jsonErrors}
                       bodyBytes={bodyBytes}
                       onJsonErrorsChange={setJsonErrors}
+                      onSave={handleSave}
                     />
                   </Suspense>
                 )}

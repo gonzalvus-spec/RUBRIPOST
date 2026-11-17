@@ -747,6 +747,42 @@ fn build_document(
     })
 }
 
+/// Construye una actualización completa sin dejar valores antiguos cuando un
+/// campo opcional pasa a `None`. Serde omite esos campos, por lo que deben
+/// retirarse explícitamente con `$unset` en lugar de depender solo de `$set`.
+fn build_request_update(document: &ApiRequestDocument) -> Result<Document, String> {
+    let mut set_fields = mongodb::bson::to_document(document)
+        .map_err(|error| format!("No se pudo serializar el documento: {error}"))?;
+
+    // Campos inmutables o gestionados mediante operadores específicos.
+    set_fields.remove("_id");
+    set_fields.remove("timestamp");
+    set_fields.remove("version");
+    set_fields.remove("orden");
+
+    let mut unset_fields = Document::new();
+    for field in [
+        "body",
+        "headers",
+        "query_descripciones",
+        "auth",
+        "coleccion_id",
+    ] {
+        if !set_fields.contains_key(field) {
+            unset_fields.insert(field, "");
+        }
+    }
+
+    let mut update = doc! {
+        "$set": set_fields,
+        "$inc": { "version": 1_i32 },
+    };
+    if !unset_fields.is_empty() {
+        update.insert("$unset", unset_fields);
+    }
+    Ok(update)
+}
+
 // ---------------------------------------------------------------------------
 // Comandos Tauri
 // ---------------------------------------------------------------------------
@@ -774,30 +810,36 @@ pub async fn save_api_request_full(payload: ApiRequestPayload) -> Result<String,
 
     match existing_id {
         Some(object_id) => {
+            let expected_version = payload.version.unwrap_or(1);
+            let eid = payload.eid.trim().to_string();
             let document = build_document(payload, Some(object_id), now, 1)?;
-
-            let mut set_fields = mongodb::bson::to_document(&document)
-                .map_err(|error| format!("No se pudo serializar el documento: {error}"))?;
-
-            // `_id` es inmutable, `timestamp` solo se escribe al insertar y
-            // `version` se incrementa de forma atómica. `orden` se conserva
-            // para no perder el reordenamiento hecho con drag & drop.
-            set_fields.remove("_id");
-            set_fields.remove("timestamp");
-            set_fields.remove("version");
-            set_fields.remove("orden");
-
-            let update: Document = doc! {
-                "$set": set_fields,
-                "$inc": { "version": 1_i32 },
-                "$setOnInsert": { "timestamp": bson::DateTime::from_chrono(now) },
+            let update = build_request_update(&document)?;
+            let version_filter = if expected_version == 1 {
+                doc! { "$or": [
+                    { "version": i64::from(expected_version) },
+                    { "version": { "$exists": false } },
+                ] }
+            } else {
+                doc! { "version": i64::from(expected_version) }
             };
+            let mut filter = doc! {
+                "_id": object_id,
+                "eid": &eid,
+                "tipo": TIPO_REQUEST,
+            };
+            filter.extend(version_filter);
 
-            collection
-                .update_one(doc! { "_id": object_id }, update)
-                .upsert(true)
+            let result = collection
+                .update_one(filter, update)
                 .await
                 .map_err(|error| format!("Error al actualizar la request en MongoDB: {error}"))?;
+
+            if result.matched_count == 0 {
+                return Err(
+                    "La request fue eliminada o modificada desde otro equipo. Actualiza el workspace antes de volver a guardar."
+                        .to_string(),
+                );
+            }
 
             log::info!(
                 "Request actualizada en MongoDB: {} ({})",
@@ -1566,6 +1608,44 @@ mod tests {
         assert!(normalize_body("POST", big).is_err());
     }
 
+    #[test]
+    fn update_elimina_body_y_campos_opcionales_vacios() {
+        let now = Utc::now();
+        let document = ApiRequestDocument {
+            id: Some(ObjectId::new()),
+            tipo: TIPO_REQUEST.to_string(),
+            eid: "TEST".to_string(),
+            nombre: "Sin body".to_string(),
+            contexto: String::new(),
+            metodo: "POST".to_string(),
+            url: "https://example.test".to_string(),
+            body: None,
+            headers: None,
+            query_descripciones: None,
+            auth: None,
+            http_info: HttpInfo::default(),
+            coleccion_id: None,
+            orden: 4,
+            timestamp: now,
+            updated_at: now,
+            version: 2,
+        };
+
+        let update = build_request_update(&document).expect("construir update");
+        let unset = update.get_document("$unset").expect("operador $unset");
+        assert!(unset.contains_key("body"));
+        assert!(unset.contains_key("headers"));
+        assert!(unset.contains_key("query_descripciones"));
+        assert!(unset.contains_key("auth"));
+        assert!(unset.contains_key("coleccion_id"));
+
+        let set_fields = update.get_document("$set").expect("operador $set");
+        assert!(!set_fields.contains_key("_id"));
+        assert!(!set_fields.contains_key("timestamp"));
+        assert!(!set_fields.contains_key("version"));
+        assert!(!set_fields.contains_key("orden"));
+    }
+
     /// Prueba de integración real contra MongoDB local.
     /// Ejecutar con: cargo test --lib -- --ignored --nocapture
     #[tokio::test]
@@ -1680,6 +1760,25 @@ mod tests {
         assert_eq!(saved.len(), 1, "el upsert no debe duplicar");
         assert_eq!(saved[0].body.as_deref(), Some("{\"numero\":\"1301\"}"));
         assert_eq!(saved[0].version, 2);
+
+        // Vaciar el body debe eliminar el valor anterior, no dejarlo intacto.
+        let mut clear_body = payload.clone();
+        clear_body.id = Some(id.clone());
+        clear_body.nombre = "Buscar XML Factura 1301".to_string();
+        clear_body.body = None;
+        clear_body.version = Some(2);
+        save_api_request_full(clear_body)
+            .await
+            .expect("vaciar body");
+
+        let saved = get_api_requests_full(ApiRequestFilter {
+            eid: eid.to_string(),
+            limit: 10,
+        })
+        .await
+        .expect("listar tras vaciar body");
+        assert_eq!(saved[0].body, None);
+        assert_eq!(saved[0].version, 3);
 
         // Duplicar.
         let copy_id = duplicate_api_request(id.clone()).await.expect("duplicar");

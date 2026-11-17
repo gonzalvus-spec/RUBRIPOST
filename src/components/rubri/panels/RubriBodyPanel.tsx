@@ -1,7 +1,8 @@
 import '../../../lib/monacoSetup';
 import clsx from 'clsx';
 import { Check, LoaderCircle, TriangleAlert } from 'lucide-react';
-import { Editor } from '@monaco-editor/react';
+import { Editor, type OnMount } from '@monaco-editor/react';
+import { useRef } from 'react';
 import { MarkerSeverity } from 'monaco-editor';
 
 import { useApiStore } from '../../../store/apiStore';
@@ -12,6 +13,7 @@ interface RubriBodyPanelProps {
   jsonErrors: number;
   bodyBytes: number;
   onJsonErrorsChange: (errors: number) => void;
+  onSave: () => void;
 }
 
 /** Pestaña Body: editor JSON con validación en vivo. */
@@ -19,9 +21,21 @@ export const RubriBodyPanel = ({
   jsonErrors,
   bodyBytes,
   onJsonErrorsChange,
+  onSave,
 }: RubriBodyPanelProps) => {
   const body = useApiStore((state) => state.body);
   const setBody = useApiStore((state) => state.setBody);
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+
+  const handleMount: OnMount = (editor, monaco) => {
+    editor.addAction({
+      id: 'rubripost.save-request',
+      label: 'Guardar request en MongoDB',
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
+      run: () => onSaveRef.current(),
+    });
+  };
 
   return (
     <div className="panel request-panel">
@@ -62,6 +76,7 @@ export const RubriBodyPanel = ({
           language="json"
           theme="rubrifact-dark"
           value={body}
+          onMount={handleMount}
           onChange={(value) => {
             const nextVal = value ?? '';
             setBody(nextVal);
