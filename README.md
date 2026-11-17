@@ -58,7 +58,8 @@ La aplicación sincroniza los datos cada **5 segundos** y conserva los cambios l
 La variable principal es `MONGODB_URI`. En la versión compilada, puedes cambiar la conexión sin recompilar colocando un archivo `rubripost.env` junto al `.exe`:
 
 ```env
-MONGODB_URI=mongodb+srv://USUARIO:CONTRASENA@CLUSTER.mongodb.net/
+# Pega aquí la URI completa obtenida desde MongoDB Atlas.
+MONGODB_URI=<URI_DE_MONGODB_ATLAS>
 ```
 
 También se admite `RUBRIPOST_ENV` para indicar una ruta de configuración. El build puede incluir una configuración de respaldo; **evita incorporar credenciales de producción en el binario**.

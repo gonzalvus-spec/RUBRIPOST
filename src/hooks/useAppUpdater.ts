@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { check, type Update } from '@tauri-apps/plugin-updater';
 
-import { withTimeout } from '../lib/async';
 import { networkStatus } from '../store/networkStore';
 
 export type AppUpdaterStatus =
@@ -17,7 +16,9 @@ export interface AppUpdaterState {
   status: AppUpdaterStatus;
   version: string | null;
   notes: string | null;
-  progress: number;
+  progress: number | null;
+  downloadedBytes: number;
+  totalBytes: number | null;
   error: string | null;
   overlay: boolean;
 }
@@ -28,7 +29,9 @@ const INITIAL_STATE: AppUpdaterState = {
   status: 'idle',
   version: null,
   notes: null,
-  progress: 0,
+  progress: null,
+  downloadedBytes: 0,
+  totalBytes: null,
   error: null,
   overlay: false,
 };
@@ -49,11 +52,14 @@ export const useAppUpdater = () => {
   const [state, setState] = useState<AppUpdaterState>(INITIAL_STATE);
   const updateRef = useRef<Update | null>(null);
   const automaticCheckStarted = useRef(false);
+  const operationInProgress = useRef(false);
 
   const checkForUpdates = useCallback(async (
     options: { visual?: boolean } = {},
   ): Promise<UpdateCheckResult> => {
     if (!isTauri()) return 'unavailable';
+    if (operationInProgress.current) return 'unavailable';
+    operationInProgress.current = true;
 
     const visual = options.visual ?? true;
     setState((current) => ({
@@ -63,11 +69,13 @@ export const useAppUpdater = () => {
       overlay: visual,
     }));
     try {
-      const update = await withTimeout(
-        check(),
-        10_000,
-        'La búsqueda de actualizaciones agotó el tiempo de espera',
-      );
+      const previous = updateRef.current;
+      updateRef.current = null;
+      if (previous) await previous.close().catch(() => undefined);
+
+      // El timeout nativo cancela la petición; Promise.race solo ocultaría una
+      // comprobación que seguiría ejecutándose en Rust.
+      const update = await check({ timeout: 15_000 });
       networkStatus().reportSuccess();
       updateRef.current = update;
 
@@ -80,7 +88,9 @@ export const useAppUpdater = () => {
         status: 'available',
         version: update.version,
         notes: update.body ?? null,
-        progress: 0,
+        progress: null,
+        downloadedBytes: 0,
+        totalBytes: null,
         error: null,
         overlay: false,
       });
@@ -95,53 +105,80 @@ export const useAppUpdater = () => {
         overlay: false,
       });
       return 'error';
+    } finally {
+      operationInProgress.current = false;
     }
   }, []);
 
   const downloadAndInstall = useCallback(async (): Promise<void> => {
     const update = updateRef.current;
     if (!update || state.status !== 'available') return;
+    if (operationInProgress.current) return;
+    operationInProgress.current = true;
 
     let downloaded = 0;
-    let total = 0;
+    let total: number | null = null;
     setState((current) => ({
       ...current,
       status: 'downloading',
-      progress: 0,
+      progress: null,
+      downloadedBytes: 0,
+      totalBytes: null,
       error: null,
       overlay: true,
     }));
 
     try {
-      await update.downloadAndInstall((event) => {
+      await update.download((event) => {
         if (event.event === 'Started') {
-          total = event.data.contentLength ?? 0;
+          total = event.data.contentLength ?? null;
+          setState((current) => ({ ...current, totalBytes: total }));
           return;
         }
 
         if (event.event === 'Progress') {
           downloaded += event.data.chunkLength;
-          const progress = total > 0
+          const progress = total && total > 0
             ? Math.min(100, Math.round((downloaded / total) * 100))
-            : 0;
-          setState((current) => ({ ...current, status: 'downloading', progress }));
+            : null;
+          setState((current) => ({
+            ...current,
+            status: 'downloading',
+            progress,
+            downloadedBytes: downloaded,
+          }));
           return;
         }
 
-        setState((current) => ({ ...current, status: 'installing', progress: 100 }));
-      });
+        setState((current) => ({
+          ...current,
+          progress: 100,
+          downloadedBytes: total ?? downloaded,
+        }));
+      }, { timeout: 10 * 60_000 });
+
+      setState((current) => ({ ...current, status: 'installing', progress: 100 }));
+      await update.install({ restartAfterInstall: true });
+      networkStatus().reportSuccess();
 
       // En Windows el instalador puede cerrar la app antes de llegar aquí. En
       // macOS/Linux este relanzamiento aplica la versión recién instalada.
       await relaunch();
     } catch (error) {
+      networkStatus().reportFailure(error);
       console.error('No se pudo instalar la actualización', error);
+      // Libera también cualquier descarga parcial retenida por el backend. Un
+      // nuevo intento hará un check nuevo y descargará un artefacto limpio.
+      await update.close().catch(() => undefined);
+      if (updateRef.current === update) updateRef.current = null;
       setState((current) => ({
         ...current,
         status: 'error',
         error: errorMessage(error),
         overlay: false,
       }));
+    } finally {
+      operationInProgress.current = false;
     }
   }, [state.status]);
 

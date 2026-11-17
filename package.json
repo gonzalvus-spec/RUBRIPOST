@@ -1,10 +1,12 @@
 {
   "name": "rubripost",
   "private": true,
-  "version": "0.1.8",
+  "version": "0.1.9",
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
+    "verify:release": "node scripts/verify-release-version.mjs",
+    "verify:signatures": "node scripts/verify-updater-signatures.mjs",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",

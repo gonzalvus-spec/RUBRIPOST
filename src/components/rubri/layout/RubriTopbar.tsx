@@ -23,7 +23,7 @@ import {
 } from '../../../store/apiStore';
 import type { SesionUsuario } from '../../../store/authStore';
 import type { AppUpdater } from '../../../hooks/useAppUpdater';
-import { confirmAction } from '../../../lib/alerts';
+import { confirmAction, notify } from '../../../lib/alerts';
 import { methodClass } from '../constants';
 import { RubriProyectoSwitcher } from './RubriProyectoSwitcher';
 import { RubrifactLogo } from './RubrifactLogo';
@@ -91,14 +91,26 @@ export const RubriTopbar = ({
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
-  const updateAvailable = updater.status === 'available' || updater.status === 'downloading' || updater.status === 'installing';
-  const updateBusy = updater.status === 'downloading' || updater.status === 'installing';
+  const updateBusy = updater.status === 'checking' || updater.status === 'downloading' || updater.status === 'installing';
   const updateVersion = updater.version?.startsWith('v')
     ? updater.version
     : `v${updater.version}`;
 
   const handleUpdateClick = async () => {
-    if (updater.status !== 'available') return;
+    if (updateBusy) return;
+    if (updater.status !== 'available') {
+      const result = await updater.checkForUpdates({ visual: true });
+      if (result === 'current') notify.success('RubriPost está actualizado');
+      if (result === 'error') notify.error('No se pudo buscar actualizaciones');
+      return;
+    }
+    if (isDirty) {
+      notify.warning(
+        'Hay cambios sin guardar',
+        'Guarda o descarta la request actual antes de instalar la actualización.',
+      );
+      return;
+    }
 
     const confirmed = await confirmAction({
       title: `Actualizar a ${updateVersion}`,
@@ -358,25 +370,32 @@ export const RubriTopbar = ({
           <Cookie size={15} />
         </button>
 
-        {updateAvailable && (
-          <button
-            type="button"
-            className={clsx('icon-btn', 'topbar-update', {
-              available: updater.status === 'available',
-              progress: updateBusy,
-            })}
-            onClick={() => void handleUpdateClick()}
-            disabled={updateBusy}
-            aria-label={`Actualizar RubriPost a ${updateVersion}`}
-            title={`Actualizar a ${updateVersion}`}
-            aria-busy={updateBusy}
-          >
-            {updateBusy ? <LoaderCircle size={15} className="spin" /> : <Download size={15} />}
-            {updater.status === 'available' && <span>Actualizar a {updateVersion}</span>}
-            {updater.status === 'downloading' && <span>Descargando {updater.progress}%...</span>}
-            {updater.status === 'installing' && <span>Instalando...</span>}
-          </button>
-        )}
+        <button
+          type="button"
+          className={clsx('icon-btn', 'topbar-update', {
+            available: updater.status === 'available',
+            progress: updateBusy,
+          })}
+          onClick={() => void handleUpdateClick()}
+          disabled={updateBusy}
+          aria-label={updater.status === 'available'
+            ? `Actualizar RubriPost a ${updateVersion}`
+            : 'Buscar actualizaciones de RubriPost'}
+          title={updater.status === 'available'
+            ? `Actualizar a ${updateVersion}`
+            : updater.status === 'error'
+              ? `Reintentar búsqueda: ${updater.error}`
+              : 'Buscar actualizaciones'}
+          aria-busy={updateBusy}
+        >
+          {updateBusy ? <LoaderCircle size={15} className="spin" /> : <Download size={15} />}
+          {updater.status === 'available' && <span>Actualizar a {updateVersion}</span>}
+          {updater.status === 'checking' && <span>Buscando...</span>}
+          {updater.status === 'downloading' && (
+            <span>{updater.progress === null ? 'Descargando...' : `Descargando ${updater.progress}%...`}</span>
+          )}
+          {updater.status === 'installing' && <span>Instalando...</span>}
+        </button>
 
         <button
           type="button"

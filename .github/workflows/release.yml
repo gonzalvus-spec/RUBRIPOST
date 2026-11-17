@@ -43,6 +43,9 @@ jobs:
       - name: Install frontend deps
         run: npm ci
 
+      - name: Verify release version
+        run: npm run verify:release -- "${{ github.ref_name }}"
+
       - name: Build frontend
         run: npm run build
 
@@ -57,5 +60,20 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'RubriPost ${{ github.ref_name }}'
           releaseBody: 'Consulta los cambios en el historial de commits.'
-          releaseDraft: false
+          # No publicar un latest.json parcial mientras otra plataforma compila.
+          releaseDraft: true
           prerelease: false
+
+      - name: Verify updater signatures
+        run: npm run verify:signatures
+
+  publish:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish verified release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "${{ github.ref_name }}" --repo "${{ github.repository }}" --draft=false --latest

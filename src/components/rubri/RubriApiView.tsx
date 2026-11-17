@@ -829,7 +829,9 @@ export const RubriApiView = () => {
   const updateStatus = updater.status === 'checking'
     ? 'Buscando actualizaciones...'
     : updater.status === 'downloading'
-      ? `Descargando actualización (${updater.progress}%)...`
+      ? updater.progress === null
+        ? 'Descargando actualización...'
+        : `Descargando actualización (${updater.progress}%)...`
       : 'Instalando nueva versión y reiniciando...';
 
   return (
@@ -846,8 +848,8 @@ export const RubriApiView = () => {
         <SplashScreen
           mode="update"
           status={updateStatus}
-          progress={updater.status === 'checking' ? 12 : updater.progress}
-          indeterminate={updater.status === 'checking'}
+          progress={updater.status === 'checking' ? 12 : (updater.progress ?? 0)}
+          indeterminate={updater.status === 'checking' || (updater.status === 'downloading' && updater.progress === null)}
         />
       )}
       <RubriTopbar
