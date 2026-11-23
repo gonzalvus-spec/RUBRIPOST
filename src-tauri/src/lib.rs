@@ -21,6 +21,7 @@ use http::{eliminar_cookie, enviar_request, guardar_cookie, limpiar_cookies, lis
 use mongo::{
     delete_api_collection, delete_api_request, duplicate_api_collection, duplicate_api_request,
     export_api_collections, get_api_requests_full, get_api_workspace, get_api_workspace_snapshot,
+    import_api_collection,
     move_api_collection, move_api_request, reorder_api_collections, reorder_api_requests,
     save_api_collection, save_api_request_full,
 };
@@ -78,6 +79,7 @@ pub fn run() {
             get_api_workspace,
             get_api_workspace_snapshot,
             export_api_collections,
+            import_api_collection,
             move_api_collection,
             save_api_collection,
             reorder_api_collections,

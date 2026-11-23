@@ -190,6 +190,10 @@ export const useAppUpdater = () => {
 
   return {
     ...state,
+    /** Solo es true después de que Tauri confirmó una versión nueva. */
+    updateAvailable: state.status === 'available'
+      || state.status === 'downloading'
+      || state.status === 'installing',
     checkForUpdates,
     downloadAndInstall,
   };

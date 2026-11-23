@@ -233,6 +233,46 @@ pub struct ApiWorkspace {
     pub requests: Vec<ApiRequestRecord>,
 }
 
+/// Lote normalizado por `jsonImport.ts`. Los IDs temporales solo existen para
+/// resolver toda la jerarquía antes de abrir la transacción de MongoDB.
+#[derive(Deserialize, Debug)]
+pub struct ImportApiCollectionPayload {
+    pub eid: String,
+    pub collections: Vec<ImportedCollectionPayload>,
+    pub requests: Vec<ImportedRequestPayload>,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ImportedCollectionPayload {
+    pub client_id: String,
+    pub nombre: String,
+    pub parent_client_id: Option<String>,
+    pub color: Option<String>,
+    pub orden: i32,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct ImportedRequestPayload {
+    pub nombre: String,
+    #[serde(default)]
+    pub contexto: String,
+    pub metodo: String,
+    pub url: String,
+    pub body: Option<String>,
+    pub headers: Option<HashMap<String, String>>,
+    pub query_descripciones: Option<HashMap<String, String>>,
+    pub auth: Option<AuthConfig>,
+    pub collection_client_id: String,
+    pub orden: i32,
+}
+
+#[derive(Serialize, Debug)]
+pub struct ImportApiCollectionResult {
+    pub root_collection_id: String,
+    pub collections: usize,
+    pub requests: usize,
+}
+
 /// Payload para eliminar una colección.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DeleteCollectionPayload {
@@ -786,6 +826,136 @@ fn build_request_update(document: &ApiRequestDocument) -> Result<Document, Strin
 // ---------------------------------------------------------------------------
 // Comandos Tauri
 // ---------------------------------------------------------------------------
+
+/// Inserta una importación completa en una transacción. Los ObjectId se
+/// reservan antes de escribir para conservar referencias padre-hijo.
+#[tauri::command]
+pub async fn import_api_collection(
+    payload: ImportApiCollectionPayload,
+) -> Result<ImportApiCollectionResult, String> {
+    let eid = payload.eid.trim().to_string();
+    if eid.is_empty() {
+        return Err("El EID es obligatorio".to_string());
+    }
+    if payload.collections.is_empty() {
+        return Err("La importación no contiene colecciones".to_string());
+    }
+    if payload.collections.len() > 500 || payload.requests.len() > 500 {
+        return Err("La importación supera el límite de 500 carpetas o 500 requests".to_string());
+    }
+
+    let mut ids = HashMap::<String, ObjectId>::new();
+    for item in &payload.collections {
+        let client_id = item.client_id.trim();
+        if client_id.is_empty() || ids.insert(client_id.to_string(), ObjectId::new()).is_some() {
+            return Err("La importación contiene IDs de colección vacíos o duplicados".to_string());
+        }
+        if item.nombre.trim().is_empty() {
+            return Err("Todas las colecciones necesitan un nombre".to_string());
+        }
+    }
+    for item in &payload.collections {
+        if let Some(parent) = item.parent_client_id.as_deref()
+            && !ids.contains_key(parent)
+        {
+            return Err(format!("La colección padre '{parent}' no existe en el lote"));
+        }
+    }
+
+    let now = Utc::now();
+    let collection_count = payload.collections.len();
+    let request_count = payload.requests.len();
+    let root_collection_id = payload
+        .collections
+        .iter()
+        .find(|item| item.parent_client_id.is_none())
+        .and_then(|item| ids.get(&item.client_id))
+        .ok_or_else(|| "La importación no contiene una colección raíz".to_string())?
+        .to_hex();
+
+    let existing_collections = list_collections(&eid).await?.len().min(i32::MAX as usize) as i32;
+    let mut collection_documents = Vec::with_capacity(collection_count);
+    for item in payload.collections {
+        let id = *ids.get(&item.client_id).ok_or_else(|| "ID temporal inválido".to_string())?;
+        let parent_id = item.parent_client_id
+            .as_deref()
+            .map(|parent| ids.get(parent).map(|id| id.to_hex())
+                .ok_or_else(|| format!("La colección padre '{parent}' no existe")))
+            .transpose()?;
+        collection_documents.push(ApiCollectionDocument {
+            id: Some(id),
+            tipo: TIPO_COLLECTION.to_string(),
+            eid: eid.clone(),
+            nombre: item.nombre.trim().to_string(),
+            parent_id,
+            color: item.color.filter(|color| !color.trim().is_empty())
+                .unwrap_or_else(|| DEFAULT_COLLECTION_COLOR.to_string()),
+            orden: existing_collections.saturating_add(item.orden.max(0)),
+            timestamp: now,
+            updated_at: now,
+        });
+    }
+
+    let mut request_documents = Vec::with_capacity(request_count);
+    for item in payload.requests {
+        if item.nombre.trim().is_empty() || item.url.trim().is_empty() {
+            return Err("Todas las requests necesitan nombre y URL".to_string());
+        }
+        let collection_id = ids.get(&item.collection_client_id)
+            .ok_or_else(|| format!("La colección '{}' de una request no existe", item.collection_client_id))?
+            .to_hex();
+        let order = item.orden.max(0);
+        let mut document = build_document(ApiRequestPayload {
+            id: None,
+            eid: eid.clone(),
+            nombre: item.nombre,
+            contexto: item.contexto,
+            metodo: item.metodo,
+            url: item.url,
+            body: item.body,
+            headers: item.headers,
+            query_descripciones: item.query_descripciones,
+            auth: item.auth,
+            http_info: HttpInfo::default(),
+            coleccion_id: Some(collection_id),
+            version: None,
+        }, Some(ObjectId::new()), now, 1)?;
+        document.orden = order;
+        request_documents.push(document);
+    }
+
+    let collection = get_collection().await?;
+    ensure_indexes(&collection).await?;
+    let collections_handle = get_collections_handle().await?;
+    let client = get_client().await?;
+    let mut session = client.start_session().await
+        .map_err(|error| format!("No se pudo iniciar la sesión de importación: {error}"))?;
+    session.start_transaction().await
+        .map_err(|error| format!("MongoDB no pudo iniciar la transacción de importación: {error}"))?;
+
+    let write_result: Result<(), String> = async {
+        collections_handle.insert_many(&collection_documents).session(&mut session).await
+            .map_err(|error| format!("No se pudieron importar las colecciones: {error}"))?;
+        if !request_documents.is_empty() {
+            collection.insert_many(&request_documents).session(&mut session).await
+                .map_err(|error| format!("No se pudieron importar las requests: {error}"))?;
+        }
+        session.commit_transaction().await
+            .map_err(|error| format!("No se pudo confirmar la importación: {error}"))?;
+        Ok(())
+    }.await;
+
+    if let Err(error) = write_result {
+        let _ = session.abort_transaction().await;
+        return Err(error);
+    }
+
+    Ok(ImportApiCollectionResult {
+        root_collection_id,
+        collections: collection_count,
+        requests: request_count,
+    })
+}
 
 /// Inserta o actualiza (upsert por `_id`) una request completa.
 ///

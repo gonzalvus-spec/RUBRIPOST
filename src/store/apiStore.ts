@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import { notify } from '../lib/alerts';
 import { registrarCambio } from '../lib/audit';
+import { parseCollectionImport } from '../lib/jsonImport';
 import { sortRequestsByOrder } from '../lib/requestOrder';
 import {
   applyCollectionLayout,
@@ -95,6 +96,12 @@ export interface ApiRequestDocument {
 export interface ApiWorkspace {
   collections: ApiCollection[];
   requests: ApiRequestDocument[];
+}
+
+export interface CollectionImportResult {
+  root_collection_id: string;
+  collections: number;
+  requests: number;
 }
 
 /** Payload enviado al backend (comando `save_api_request_full`). */
@@ -426,6 +433,7 @@ export interface ApiState {
   activeCollectionId: string | null;
   isDirty: boolean;
   isSaving: boolean;
+  isImporting: boolean;
   isRefreshing: boolean;
   deletingId: string | null;
   busyCollectionId: string | null;
@@ -484,6 +492,8 @@ export interface ApiState {
   ) => Promise<boolean>;
   deleteCollection: (id: string) => Promise<boolean>;
   duplicateCollection: (id: string) => Promise<string | null>;
+  /** Valida y persiste un archivo Rubri-Cut 1.0 o una exportación nativa. */
+  importCollectionFromJson: (rawJson: string) => Promise<CollectionImportResult>;
   /** Reordena las colecciones del sidebar (drag & drop) y persiste `orden`. */
   reorderCollections: (orderedIds: string[]) => Promise<void>;
 
@@ -591,6 +601,7 @@ export const useApiStore = create<ApiState>()((set, get) => {
     activeCollectionId: initialCollections[0]?._id ?? null,
     isDirty: false,
     isSaving: false,
+    isImporting: false,
     isRefreshing: false,
     deletingId: null,
     busyCollectionId: null,
@@ -826,7 +837,7 @@ export const useApiStore = create<ApiState>()((set, get) => {
       // Esperar la lectura compartida evita un resultado vacío en montajes simultáneos.
       if (!options.force && workspaceRefresh?.user === user && workspaceRefresh.eid === state.eid) return workspaceRefresh.promise;
       // Nunca competir con un guardado o un movimiento de colección en curso.
-      if (options.background && (state.isSaving || collectionMovePending > 0)) {
+      if (options.background && (state.isSaving || state.isImporting || collectionMovePending > 0)) {
         return state.savedRequests;
       }
 
@@ -838,7 +849,7 @@ export const useApiStore = create<ApiState>()((set, get) => {
 
       try {
         const workspace = await invoke<ApiWorkspace>(options.readOnly ? 'get_api_workspace_snapshot' : 'get_api_workspace', {
-          filter: { eid: state.eid, limit: 200 },
+          filter: { eid: state.eid, limit: 500 },
         });
         networkStatus().reportSuccess();
         if (requestId !== syncSequence || get().eid !== state.eid || (useAuthStore.getState().sesion?.usuario ?? '') !== user) return get().savedRequests;
@@ -1316,6 +1327,42 @@ export const useApiStore = create<ApiState>()((set, get) => {
         set({ busyCollectionId: null });
         notify.error(`Error al crear la colección: ${errorMessage(error)}`);
         return null;
+      }
+    },
+
+    importCollectionFromJson: async (rawJson) => {
+      const batch = parseCollectionImport(rawJson);
+      const { eid } = get();
+      // Invalida cualquier sondeo iniciado antes de la escritura masiva.
+      ++syncSequence;
+      set({ isImporting: true, lastError: null });
+      try {
+        const result = await invoke<CollectionImportResult>('import_api_collection', {
+          payload: { eid, ...batch },
+        });
+        networkStatus().reportSuccess();
+        registrarCambio({
+          eid,
+          accion: 'Importó colección JSON',
+          entidad: 'collection',
+          entidadId: result.root_collection_id,
+          detalle: `${result.collections} carpeta(s) y ${result.requests} request(s)`,
+        });
+        await get().refreshFromMongo({ silent: true, force: true });
+        const current = get();
+        const user = useAuthStore.getState().sesion?.usuario ?? '';
+        writeCollectionCache(user, eid, current.collections);
+        if (current.eid === eid) {
+          set({ activeCollectionId: result.root_collection_id });
+        }
+        return result;
+      } catch (error) {
+        networkStatus().reportFailure(error);
+        const message = errorMessage(error);
+        set({ lastError: message });
+        throw new Error(message);
+      } finally {
+        set({ isImporting: false });
       }
     },
 

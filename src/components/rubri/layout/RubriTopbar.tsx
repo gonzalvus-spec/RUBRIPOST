@@ -91,19 +91,15 @@ export const RubriTopbar = ({
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
 
-  const updateBusy = updater.status === 'checking' || updater.status === 'downloading' || updater.status === 'installing';
+  const updateBusy = updater.status === 'downloading' || updater.status === 'installing';
+  const showMainUpdate = updater.updateAvailable;
   const updateVersion = updater.version?.startsWith('v')
     ? updater.version
     : `v${updater.version}`;
 
   const handleUpdateClick = async () => {
     if (updateBusy) return;
-    if (updater.status !== 'available') {
-      const result = await updater.checkForUpdates({ visual: true });
-      if (result === 'current') notify.success('RubriPost está actualizado');
-      if (result === 'error') notify.error('No se pudo buscar actualizaciones');
-      return;
-    }
+    if (updater.status !== 'available') return;
     if (isDirty) {
       notify.warning(
         'Hay cambios sin guardar',
@@ -370,32 +366,29 @@ export const RubriTopbar = ({
           <Cookie size={15} />
         </button>
 
-        <button
-          type="button"
-          className={clsx('icon-btn', 'topbar-update', {
-            available: updater.status === 'available',
-            progress: updateBusy,
-          })}
-          onClick={() => void handleUpdateClick()}
-          disabled={updateBusy}
-          aria-label={updater.status === 'available'
-            ? `Actualizar RubriPost a ${updateVersion}`
-            : 'Buscar actualizaciones de RubriPost'}
-          title={updater.status === 'available'
-            ? `Actualizar a ${updateVersion}`
-            : updater.status === 'error'
-              ? `Reintentar búsqueda: ${updater.error}`
-              : 'Buscar actualizaciones'}
-          aria-busy={updateBusy}
-        >
-          {updateBusy ? <LoaderCircle size={15} className="spin" /> : <Download size={15} />}
-          {updater.status === 'available' && <span>Actualizar a {updateVersion}</span>}
-          {updater.status === 'checking' && <span>Buscando...</span>}
-          {updater.status === 'downloading' && (
-            <span>{updater.progress === null ? 'Descargando...' : `Descargando ${updater.progress}%...`}</span>
-          )}
-          {updater.status === 'installing' && <span>Instalando...</span>}
-        </button>
+        {showMainUpdate && (
+          <button
+            type="button"
+            className={clsx('icon-btn', 'topbar-update', {
+              available: updater.status === 'available',
+              progress: updateBusy,
+            })}
+            onClick={() => void handleUpdateClick()}
+            disabled={updateBusy}
+            aria-label={updater.status === 'available'
+              ? `Actualizar RubriPost a ${updateVersion}`
+              : 'Actualización de RubriPost en progreso'}
+            title={updater.status === 'available' ? `Actualizar a ${updateVersion}` : 'Actualización en progreso'}
+            aria-busy={updateBusy}
+          >
+            {updateBusy ? <LoaderCircle size={15} className="spin" /> : <Download size={15} />}
+            {updater.status === 'available' && <span>Actualizar a {updateVersion}</span>}
+            {updater.status === 'downloading' && (
+              <span>{updater.progress === null ? 'Descargando...' : `Descargando ${updater.progress}%...`}</span>
+            )}
+            {updater.status === 'installing' && <span>Instalando...</span>}
+          </button>
+        )}
 
         <button
           type="button"

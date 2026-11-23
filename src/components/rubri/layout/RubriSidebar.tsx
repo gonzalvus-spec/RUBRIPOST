@@ -7,6 +7,7 @@ import {
   Download,
   Folder,
   FolderPlus,
+  Import,
   GripVertical,
   LoaderCircle,
   Pencil,
@@ -39,6 +40,7 @@ import { methodClass } from '../constants';
 import type { CollectionDropTarget, DraggingRequest, RequestDropTarget } from '../types';
 import { RubriCollectionActionsMenu } from './RubriCollectionActionsMenu';
 import { RubriExportModal } from '../modal/RubriExportModal';
+import { RubriImportModal } from '../modal/RubriImportModal';
 import './RubriSidebar.css';
 
 const ROOT_DROP_ID = 'root-collections';
@@ -92,6 +94,7 @@ export const RubriSidebar = ({
 
   const [search, setSearch] = useState('');
   const [exportOpen, setExportOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const preferenceScope = collectionPreferenceKey(user, eid);
   const [closedPreference, setClosedPreference] = useState(() => ({ scope: preferenceScope, ids: readClosedCollections(user, eid) }));
   const collapsedCollections = closedPreference.scope === preferenceScope ? closedPreference.ids : readClosedCollections(user, eid);
@@ -427,6 +430,9 @@ export const RubriSidebar = ({
 
             {!collapsed && (
               <div className="side-title-actions">
+                <button type="button" className="icon-btn tiny" onClick={() => setImportOpen(true)} aria-label="Importar colecciones desde JSON" title="Importar JSON">
+                  <Import size={12} />
+                </button>
                 <button type="button" className="icon-btn tiny" onClick={() => setExportOpen(true)} aria-label="Exportar colecciones a JSON" title="Exportar colecciones a JSON">
                   <Download size={12} />
                 </button>
@@ -784,6 +790,7 @@ export const RubriSidebar = ({
         </div>
       )}
       {exportOpen && <RubriExportModal onClose={() => setExportOpen(false)} />}
+      {importOpen && <RubriImportModal onClose={() => setImportOpen(false)} />}
     </aside>
   );
 };
