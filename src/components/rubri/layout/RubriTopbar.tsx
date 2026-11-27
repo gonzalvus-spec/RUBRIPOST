@@ -5,13 +5,17 @@ import {
   Clock,
   Cookie,
   Download,
+  Check,
   LoaderCircle,
   LogOut,
   LayoutDashboard,
+  Layers3,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
   RefreshCw,
+  Search,
+  Settings,
   X,
 } from 'lucide-react';
 
@@ -23,6 +27,7 @@ import {
 } from '../../../store/apiStore';
 import type { SesionUsuario } from '../../../store/authStore';
 import type { AppUpdater } from '../../../hooks/useAppUpdater';
+import { useEnvironmentStore } from '../../../store/environmentStore';
 import { confirmAction, notify } from '../../../lib/alerts';
 import { methodClass } from '../constants';
 import { RubriProyectoSwitcher } from './RubriProyectoSwitcher';
@@ -57,6 +62,10 @@ interface RubriTopbarProps {
   onCloseDraft: () => void;
   onNewRequest: () => void;
   onRefresh: () => void;
+  environmentOpen: boolean;
+  environmentName: string;
+  onCloseEnvironment: () => void;
+  onConfigureEnvironments: () => void;
 }
 
 export const RubriTopbar = ({
@@ -87,9 +96,21 @@ export const RubriTopbar = ({
   onCloseDraft,
   onNewRequest,
   onRefresh,
+  environmentOpen,
+  environmentName,
+  onCloseEnvironment,
+  onConfigureEnvironments,
 }: RubriTopbarProps) => {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [environmentMenuOpen, setEnvironmentMenuOpen] = useState(false);
+  const [environmentSearch, setEnvironmentSearch] = useState('');
+  const environments = useEnvironmentStore((state) => state.environments);
+  const activeEnvironmentId = useEnvironmentStore((state) => state.activeEnvironmentId);
+  const selectActiveEnvironment = useEnvironmentStore((state) => state.selectActive);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const environmentMenuRef = useRef<HTMLDivElement | null>(null);
+  const activeEnvironment = environments.find((item) => item._id === activeEnvironmentId);
+  const visibleEnvironments = environments.filter((item) => item.nombre.toLowerCase().includes(environmentSearch.trim().toLowerCase()));
 
   const updateBusy = updater.status === 'downloading' || updater.status === 'installing';
   const showMainUpdate = updater.updateAvailable;
@@ -139,6 +160,17 @@ export const RubriTopbar = ({
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [menuOpen]);
+
+  useEffect(() => {
+    if (!environmentMenuOpen) return;
+    const close = (event: MouseEvent) => {
+      if (environmentMenuRef.current && !environmentMenuRef.current.contains(event.target as Node)) setEnvironmentMenuOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setEnvironmentMenuOpen(false); };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', escape);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', escape); };
+  }, [environmentMenuOpen]);
 
   const handleSelectTab = (id: string) => {
     setMenuOpen(false);
@@ -198,8 +230,15 @@ export const RubriTopbar = ({
             </div>
           )}
 
+          {environmentOpen && (
+            <div className="topbar-tab active environment-tab">
+              <span className="topbar-tab-main is-draft"><span className="tab-overview-icon"><Layers3 size={13} /></span><span className="topbar-tab-name">{environmentName}</span></span>
+              <button type="button" className="topbar-tab-close" onClick={onCloseEnvironment} title="Cerrar entorno"><X size={11} /></button>
+            </div>
+          )}
+
           {openTabs.map((item) => {
-            const isActive = !overviewOpen && item._id === lastSavedId;
+            const isActive = !overviewOpen && !environmentOpen && item._id === lastSavedId;
             const label = isActive ? nombre || item.nombre : item.nombre;
             const method = isActive ? metodo : item.metodo;
 
@@ -238,7 +277,7 @@ export const RubriTopbar = ({
             );
           })}
 
-          {draftOpen && !lastSavedId && !overviewOpen && (
+          {draftOpen && !lastSavedId && !overviewOpen && !environmentOpen && (
             <div className="topbar-tab active">
               <span className="topbar-tab-main is-draft">
                 <span className={clsx('tab-method', methodClass(metodo))}>
@@ -299,7 +338,7 @@ export const RubriTopbar = ({
               <div className="tabs-menu-head">Pestañas abiertas ({openTabs.length})</div>
               <div className="tabs-menu-list">
                 {openTabs.map((item) => {
-                  const isActive = !overviewOpen && item._id === lastSavedId;
+                  const isActive = !overviewOpen && !environmentOpen && item._id === lastSavedId;
                   const label = isActive ? nombre || item.nombre : item.nombre;
                   const method = isActive ? metodo : item.metodo;
 
@@ -346,6 +385,20 @@ export const RubriTopbar = ({
       </div>
 
       <div className="topbar-actions">
+        <div className="environment-selector" ref={environmentMenuRef}>
+          <button type="button" className={clsx('environment-selector-trigger', { active: environmentMenuOpen })} onClick={() => setEnvironmentMenuOpen((value) => !value)} aria-haspopup="menu" aria-expanded={environmentMenuOpen}>
+            <span>{activeEnvironment?.nombre ?? 'No Environment'}</span><ChevronDown size={13} />
+          </button>
+          {environmentMenuOpen && <div className="environment-selector-popover" role="menu">
+            <label className="environment-selector-search"><Search size={13} /><input value={environmentSearch} onChange={(event) => setEnvironmentSearch(event.target.value)} placeholder="Search environments..." autoFocus /></label>
+            <div className="environment-selector-list">
+              <button type="button" className={clsx({ selected: activeEnvironmentId === null })} onClick={() => { selectActiveEnvironment(null); setEnvironmentMenuOpen(false); }}><span className="environment-selector-check">{activeEnvironmentId === null && <Check size={14} />}</span><span>No Environment</span></button>
+              {visibleEnvironments.map((environment) => <button type="button" className={clsx({ selected: activeEnvironmentId === environment._id })} key={environment._id} onClick={() => { selectActiveEnvironment(environment._id); setEnvironmentMenuOpen(false); }}><span className="environment-selector-check">{activeEnvironmentId === environment._id && <Check size={14} />}</span><span>{environment.nombre}</span></button>)}
+              {visibleEnvironments.length === 0 && <p>No environments found</p>}
+            </div>
+            <button type="button" className="environment-configure" onClick={() => { setEnvironmentMenuOpen(false); onConfigureEnvironments(); }}><Settings size={14} /><span>Configure</span></button>
+          </div>}
+        </div>
         <button
           type="button"
           className="icon-btn"

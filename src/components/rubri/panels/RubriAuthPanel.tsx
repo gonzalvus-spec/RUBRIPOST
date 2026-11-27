@@ -4,6 +4,7 @@ import { Eye, EyeOff, Info, Shield } from 'lucide-react';
 import { useApiStore, type AuthKind } from '../../../store/apiStore';
 import './RubriPanel.css';
 import './RubriAuthPanel.css';
+import { VariableBadges } from '../environments/VariableBadges';
 
 /** Pestaña Auth: credenciales que se envían con la request. */
 export const RubriAuthPanel = () => {
@@ -24,6 +25,7 @@ export const RubriAuthPanel = () => {
               ? 'Bearer Token'
               : 'API Key'}
         </span>
+        <VariableBadges values={[auth.token ?? '', auth.api_key_name ?? '', auth.api_key_value ?? '']} />
       </div>
 
       <div className="auth-panel">

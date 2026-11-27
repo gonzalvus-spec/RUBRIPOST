@@ -19,6 +19,8 @@ export const RubriRequestTabs = ({
   const body = useApiStore((state) => state.body);
   const url = useApiStore((state) => state.url);
   const headerRows = useApiStore((state) => state.headerRows);
+  const preRequestScript = useApiStore((state) => state.preRequestScript);
+  const postResponseScript = useApiStore((state) => state.postResponseScript);
   const activeHeaders = headerRows.filter(
     (row) => row.enabled && row.key.trim(),
   ).length;
@@ -40,19 +42,6 @@ export const RubriRequestTabs = ({
       <button
         type="button"
         role="tab"
-        aria-selected={activeTab === 'body'}
-        aria-label="Pestaña Body"
-        className={clsx('req-tab', { active: activeTab === 'body' })}
-        onClick={() => onChange('body')}
-      >
-        Body
-        {body.trim() !== '' && jsonErrors > 0 && (
-          <span className="tab-error">{jsonErrors}</span>
-        )}
-      </button>
-      <button
-        type="button"
-        role="tab"
         aria-selected={activeTab === 'auth'}
         aria-label="Pestaña Auth"
         className={clsx('req-tab', { active: activeTab === 'auth' })}
@@ -70,6 +59,30 @@ export const RubriRequestTabs = ({
       >
         Headers
         {activeHeaders > 0 && <span className="tab-count">{activeHeaders}</span>}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={activeTab === 'body'}
+        aria-label="Pestaña Body"
+        className={clsx('req-tab', { active: activeTab === 'body' })}
+        onClick={() => onChange('body')}
+      >
+        Body
+        {body.trim() !== '' && jsonErrors > 0 && (
+          <span className="tab-error">{jsonErrors}</span>
+        )}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={activeTab === 'scripts'}
+        aria-label="Pestaña Scripts"
+        className={clsx('req-tab', { active: activeTab === 'scripts' })}
+        onClick={() => onChange('scripts')}
+      >
+        Scripts
+        {(preRequestScript.trim() || postResponseScript.trim()) && <span className="tab-script-dot" aria-label="Scripts con código" />}
       </button>
     </div>
   );

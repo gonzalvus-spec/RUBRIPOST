@@ -8,6 +8,8 @@
   gap: 3px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--rubri-border);
+  overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .req-tab {
@@ -22,7 +24,16 @@
   font-family: inherit;
   font-size: 0.86rem;
   cursor: pointer;
+  flex-shrink: 0;
   transition: var(--rubri-transition);
+}
+
+.tab-script-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--rubri-green-light);
+  box-shadow: 0 0 6px rgba(10, 143, 78, 0.8);
 }
 
 .req-tab:hover {
@@ -59,4 +70,3 @@
   font-weight: 700;
   text-align: center;
 }
-

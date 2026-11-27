@@ -3,6 +3,7 @@ import { Info, Plus, X } from 'lucide-react';
 import { createHeaderRow, useApiStore, type HeaderRow } from '../../../store/apiStore';
 import './RubriPanel.css';
 import './RubriHeadersPanel.css';
+import { VariableBadges } from '../environments/VariableBadges';
 
 /** Pestaña Headers: filas de cabeceras manuales. */
 export const RubriHeadersPanel = () => {
@@ -26,6 +27,7 @@ export const RubriHeadersPanel = () => {
     <div className="panel request-panel">
       <div className="panel-toolbar">
         <span className="panel-caption">Headers · {activeHeaders} activos</span>
+        <VariableBadges values={headerRows.flatMap((row) => [row.key, row.value])} />
       </div>
 
       <div className="headers-panel">

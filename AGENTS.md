@@ -23,6 +23,7 @@ src/
 ├── store/
 │   ├── apiStore.ts               # núcleo: workspace, colecciones, requests, draft, sync 5 s
 │   ├── authStore.ts              # sesión persistida en localStorage, login/registro, perfil
+│   ├── environmentStore.ts       # entornos/variables por proyecto y selección activa
 │   ├── chatStore.ts              # estado efímero de lectura del chat por request
 │   └── networkStore.ts           # online/offline y clasificación de fallos de red
 ├── components/
@@ -30,7 +31,8 @@ src/
 │   ├── rubri/RubriApiView.tsx    # pantalla principal del cliente HTTP (orquesta todo)
 │   ├── rubri/layout/             # sidebar (árbol drag&drop), topbar, switcher de proyecto, status bar
 │   ├── rubri/request/            # barra URL+método, pestañas, menú de colección, chat de notas
-│   ├── rubri/panels/             # Params, Body, Auth, Headers y Response (Monaco)
+│   ├── rubri/panels/             # Params, Body, Auth, Headers, Scripts y Response (Monaco)
+│   ├── rubri/environments/       # editor de entornos, variables y ayudas de interpolación
 │   ├── rubri/overview/           # vista general del proyecto (estadísticas y carpetas)
 │   ├── rubri/modal/              # modales de nombre/renombrar y exportación JSON
 │   ├── cookies/                  # RubriCookiesModal: tarro de cookies por dominio
@@ -42,6 +44,7 @@ src/
 ├── hooks/useAppUpdater.ts        # ciclo del updater de Tauri (check, descarga, instalación)
 └── lib/
     ├── httpClient.ts             # invoke a Rust (`enviar_request`, cookies) con fallback fetch
+    ├── environmentVariables.ts / scriptRunner.ts # interpolación `{{...}}` y sandbox de scripts
     ├── alerts.ts / audit.ts      # SweetAlert2 unificado / registro de cambios en `historial`
     ├── queryParams.ts            # la URL es la fuente de verdad de los query params
     ├── collectionHierarchy.ts / requestOrder.ts  # drag&drop: jerarquía, ciclos y orden
@@ -58,6 +61,7 @@ src-tauri/src/
 ├── proyectos.rs                  # CRUD de `proyectos` (código = `eid`, cascada al renombrar)
 ├── auth.rs                       # `usuarios` (Argon2id) e `historial` (bitácora)
 ├── chat.rs                       # mensajes del chat (workspace/request)
+├── environments.rs               # CRUD de entornos y variables secret cifradas
 ├── http.rs                       # `enviar_request` con reqwest y tarro de `cookies`
 ├── export.rs                     # guardado JSON con diálogo nativo
 └── fechas.rs                     # serialización BSON DateTime tolerante a texto RFC 3339

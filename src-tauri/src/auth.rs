@@ -215,7 +215,7 @@ fn verificar_password(password: &str, hash: &str) -> bool {
     }
 }
 
-async fn insertar_historial(entrada: RegistrarHistorialPayload) -> Result<(), String> {
+pub(crate) async fn insertar_historial(entrada: RegistrarHistorialPayload) -> Result<(), String> {
     let usuario = entrada.usuario.trim();
     if usuario.is_empty() {
         return Err("El historial requiere un usuario".to_string());

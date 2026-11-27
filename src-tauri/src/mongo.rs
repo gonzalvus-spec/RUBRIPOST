@@ -122,6 +122,10 @@ pub struct ApiRequestDocument {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auth: Option<AuthConfig>,
     #[serde(default)]
+    pub pre_request_script: String,
+    #[serde(default)]
+    pub post_response_script: String,
+    #[serde(default)]
     pub http_info: HttpInfo,
     /// Colección (documento `tipo: "collection"`) a la que pertenece.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -262,6 +266,10 @@ pub struct ImportedRequestPayload {
     pub headers: Option<HashMap<String, String>>,
     pub query_descripciones: Option<HashMap<String, String>>,
     pub auth: Option<AuthConfig>,
+    #[serde(default)]
+    pub pre_request_script: String,
+    #[serde(default)]
+    pub post_response_script: String,
     pub collection_client_id: String,
     pub orden: i32,
 }
@@ -316,6 +324,10 @@ pub struct ApiRequestPayload {
     #[serde(default)]
     pub auth: Option<AuthConfig>,
     #[serde(default)]
+    pub pre_request_script: String,
+    #[serde(default)]
+    pub post_response_script: String,
+    #[serde(default)]
     pub http_info: HttpInfo,
     /// Colección destino. `None` deja la request sin colección.
     #[serde(default)]
@@ -353,6 +365,8 @@ pub struct ApiRequestRecord {
     #[serde(default)]
     pub query_descripciones: HashMap<String, String>,
     pub auth: Option<AuthConfig>,
+    pub pre_request_script: String,
+    pub post_response_script: String,
     pub http_info: HttpInfo,
     pub coleccion_id: Option<String>,
     pub orden: i32,
@@ -377,6 +391,8 @@ impl ApiRequestDocument {
             headers,
             query_descripciones,
             auth,
+            pre_request_script,
+            post_response_script,
             http_info,
             coleccion_id,
             orden,
@@ -402,6 +418,8 @@ impl ApiRequestDocument {
             headers,
             query_descripciones: query_descripciones.unwrap_or_default(),
             auth,
+            pre_request_script,
+            post_response_script,
             http_info,
             coleccion_id,
             orden,
@@ -629,7 +647,7 @@ fn encryption_key() -> &'static [u8; 32] {
     })
 }
 
-fn encrypt_secret(plain: &str) -> Result<String, String> {
+pub(crate) fn encrypt_secret(plain: &str) -> Result<String, String> {
     if plain.is_empty() {
         return Ok(String::new());
     }
@@ -652,7 +670,7 @@ fn encrypt_secret(plain: &str) -> Result<String, String> {
     Ok(format!("{ENC_PREFIX}{}", BASE64.encode(payload)))
 }
 
-fn decrypt_secret(value: &str) -> Result<String, String> {
+pub(crate) fn decrypt_secret(value: &str) -> Result<String, String> {
     if value.is_empty() {
         return Ok(String::new());
     }
@@ -778,6 +796,8 @@ fn build_document(
         headers,
         query_descripciones,
         auth,
+        pre_request_script: payload.pre_request_script,
+        post_response_script: payload.post_response_script,
         http_info: payload.http_info,
         coleccion_id,
         orden: 0,
@@ -916,6 +936,8 @@ pub async fn import_api_collection(
             headers: item.headers,
             query_descripciones: item.query_descripciones,
             auth: item.auth,
+            pre_request_script: item.pre_request_script,
+            post_response_script: item.post_response_script,
             http_info: HttpInfo::default(),
             coleccion_id: Some(collection_id),
             version: None,
@@ -1793,6 +1815,8 @@ mod tests {
             headers: None,
             query_descripciones: None,
             auth: None,
+            pre_request_script: String::new(),
+            post_response_script: String::new(),
             http_info: HttpInfo::default(),
             coleccion_id: None,
             orden: 4,
@@ -1856,6 +1880,8 @@ mod tests {
                 api_key_name: None,
                 api_key_value: None,
             }),
+            pre_request_script: String::new(),
+            post_response_script: String::new(),
             http_info: HttpInfo {
                 status_code: 200,
                 duration_ms: 321,

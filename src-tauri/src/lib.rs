@@ -3,6 +3,7 @@
 mod auth;
 mod chat;
 mod config;
+mod environments;
 mod export;
 mod fechas;
 mod http;
@@ -15,6 +16,10 @@ use auth::{
 };
 use chat::{
     delete_chat_message, get_chat_messages, send_chat_message, update_chat_message,
+};
+use environments::{
+    delete_environment, duplicate_environment, get_environments, list_environments,
+    save_environment,
 };
 use export::save_export_json;
 use http::{eliminar_cookie, enviar_request, guardar_cookie, limpiar_cookies, listar_cookies};
@@ -107,7 +112,12 @@ pub fn run() {
             limpiar_cookies,
             listar_proyectos,
             guardar_proyecto,
-            eliminar_proyecto
+            eliminar_proyecto,
+            list_environments,
+            get_environments,
+            save_environment,
+            delete_environment,
+            duplicate_environment
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

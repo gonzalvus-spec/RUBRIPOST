@@ -4,6 +4,8 @@ import { LoaderCircle, Save, Send } from 'lucide-react';
 import { useApiStore, type HttpMethod } from '../../../store/apiStore';
 import { METHOD_OPTIONS, methodClass } from '../constants';
 import './RubriRequestBar.css';
+import { VariableBadges } from '../environments/VariableBadges';
+import { variableNamesIn } from '../../../lib/environmentVariables';
 
 interface RubriRequestBarProps {
   isSaving: boolean;
@@ -26,7 +28,7 @@ export const RubriRequestBar = ({
   const setMethod = useApiStore((state) => state.setMethod);
   const setUrl = useApiStore((state) => state.setUrl);
 
-  return (
+  return (<>
     <div className="request-bar">
       <select
         className={clsx('method-select', methodClass(metodo))}
@@ -70,7 +72,7 @@ export const RubriRequestBar = ({
         type="button"
         className="btn btn-send"
         onClick={onSend}
-        disabled={sending || (body.trim() !== '' && jsonErrors > 0)}
+        disabled={sending || (body.trim() !== '' && jsonErrors > 0 && variableNamesIn(body).length === 0)}
         aria-label="Enviar request"
         title="Enviar request (Ctrl+Enter)"
         aria-busy={sending}
@@ -79,7 +81,8 @@ export const RubriRequestBar = ({
         {sending ? 'Enviando...' : 'Enviar'}
       </button>
     </div>
-  );
+    <VariableBadges values={[url]} />
+  </>);
 };
 
 export default RubriRequestBar;

@@ -10,6 +10,7 @@ import {
 import { useApiStore } from '../../../store/apiStore';
 import './RubriPanel.css';
 import './RubriQueryPanel.css';
+import { VariableBadges } from '../environments/VariableBadges';
 
 /**
  * Pestaña Params: tabla de query params.
@@ -91,6 +92,7 @@ export const RubriQueryPanel = () => {
         <span className="panel-caption">
           Query Params · {activos} activo{activos === 1 ? '' : 's'}
         </span>
+        <VariableBadges values={rows.flatMap((row) => [row.key, row.value])} />
       </div>
 
       <div className="query-panel">

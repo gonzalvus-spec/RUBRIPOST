@@ -23,6 +23,8 @@ export interface ImportedRequest {
     api_key_name?: string | null;
     api_key_value?: string | null;
   } | null;
+  pre_request_script: string;
+  post_response_script: string;
   collection_client_id: string;
   orden: number;
 }
@@ -174,6 +176,8 @@ export const parseCollectionImport = (rawJson: string): JsonImportBatch => {
       headers: Object.keys(headers).length ? headers : null,
       query_descripciones: null,
       auth: nativeAuth(request.auth, `${path}.auth`),
+      pre_request_script: '',
+      post_response_script: '',
       collection_client_id: collectionId,
       orden: order,
     });
@@ -231,6 +235,8 @@ export const parseCollectionImport = (rawJson: string): JsonImportBatch => {
           query_descripciones: Object.keys(stringRecord(request.query_descripciones, `${path}.requests[${requestOrder}].query_descripciones`)).length
             ? stringRecord(request.query_descripciones, `${path}.requests[${requestOrder}].query_descripciones`) : null,
           auth: nativeAuth(request.auth, `${path}.requests[${requestOrder}].auth`),
+          pre_request_script: optionalString(request.pre_request_script, `${path}.requests[${requestOrder}].pre_request_script`) ?? '',
+          post_response_script: optionalString(request.post_response_script, `${path}.requests[${requestOrder}].post_response_script`) ?? '',
           collection_client_id: id,
           orden: requestOrder,
         });

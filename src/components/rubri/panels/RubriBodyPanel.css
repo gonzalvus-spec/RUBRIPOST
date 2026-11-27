@@ -26,3 +26,4 @@
   font-size: 0.8rem;
 }
 
+.monaco-editor .environment-variable-known{color:#6ee7b7!important;background:rgba(16,185,129,.12);border-bottom:1px solid #10b981}.monaco-editor .environment-variable-secret{color:#fbbf24!important;background:rgba(245,158,11,.12);border-bottom:1px solid #f59e0b}.monaco-editor .environment-variable-missing{color:#f87171!important;background:rgba(239,68,68,.12);text-decoration:underline wavy #ef4444}

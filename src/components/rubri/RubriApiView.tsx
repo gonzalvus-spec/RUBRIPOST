@@ -28,6 +28,11 @@ import { RubriQueryPanel } from './panels/RubriQueryPanel';
 import { enviarRequest } from '../../lib/httpClient';
 import { readSendCookies, writeSendCookies } from '../../lib/cookiePreferences';
 import { RubriResponsePanel } from './panels/RubriResponsePanel';
+import { RubriScriptsPanel } from './panels/RubriScriptsPanel';
+import { EnvironmentEditor } from './environments/EnvironmentEditor';
+import { useEnvironmentStore } from '../../store/environmentStore';
+import { resolveEnvironmentVariables, variableNamesIn } from '../../lib/environmentVariables';
+import { runRequestScript } from '../../lib/scriptRunner';
 import { RequestChatPanel } from './request/RequestChatPanel';
 import { readChatCollapsed, writeChatCollapsed } from '../../lib/chatPreferences';
 import { RubriWorkspaceOverview } from './overview/RubriWorkspaceOverview';
@@ -74,6 +79,8 @@ export const RubriApiView = () => {
   const body = useApiStore((state) => state.body);
   const headerRows = useApiStore((state) => state.headerRows);
   const auth = useApiStore((state) => state.auth);
+  const preRequestScript = useApiStore((state) => state.preRequestScript);
+  const postResponseScript = useApiStore((state) => state.postResponseScript);
   const savedRequests = useApiStore((state) => state.savedRequests);
   const collections = useApiStore((state) => state.collections);
   const isDirty = useApiStore((state) => state.isDirty);
@@ -103,9 +110,14 @@ export const RubriApiView = () => {
   const renameCollection = useApiStore((state) => state.renameCollection);
   const deleteCollection = useApiStore((state) => state.deleteCollection);
   const duplicateCollection = useApiStore((state) => state.duplicateCollection);
+  const editorEnvironmentId = useEnvironmentStore((state) => state.editorEnvironmentId);
+  const environments = useEnvironmentStore((state) => state.environments);
+  const syncEnvironments = useEnvironmentStore((state) => state.sync);
+  const openEnvironmentEditor = useEnvironmentStore((state) => state.openEditor);
 
   // UI local
   const [activeTab, setActiveTab] = useState<TabId>('body');
+  const [environmentManagerOpen, setEnvironmentManagerOpen] = useState(false);
   /** La aplicación abre en el Overview del workspace, no en una request vacía. */
   const [overviewOpen, setOverviewOpen] = useState(true);
   /**
@@ -383,7 +395,7 @@ export const RubriApiView = () => {
 
   const handleSend = async () => {
     if (sending) return;
-    if (body.trim() !== '' && jsonErrors > 0) {
+    if (body.trim() !== '' && jsonErrors > 0 && variableNamesIn(body).length === 0) {
       notify.error('Corrige los errores de JSON antes de enviar');
       return;
     }
@@ -403,13 +415,42 @@ export const RubriApiView = () => {
     patchResponse(requestKey, { body: '// Enviando request...', status: null });
 
     try {
+      const environmentStore = useEnvironmentStore.getState();
+      let variables = environmentStore.activeVariables();
+      const rawHeaders = buildRequestHeaders();
+
+      // El pre-request puede modificar el entorno antes de interpolar la request.
+      const beforeResult = await runRequestScript({
+        script: preRequestScript,
+        environment: variables,
+        request: { url, headers: rawHeaders },
+      });
+      await useEnvironmentStore.getState().setVariablesFromScript(beforeResult.changed);
+      variables = useEnvironmentStore.getState().activeVariables();
+
+      const resolvedUrl = resolveEnvironmentVariables(url, variables);
+      const resolvedBody = resolveEnvironmentVariables(body, variables);
+      const resolvedHeaders: Record<string, string> = {};
+      const missing = new Set([...resolvedUrl.missing, ...resolvedBody.missing]);
+      for (const [rawKey, rawValue] of Object.entries(rawHeaders)) {
+        const keyResult = resolveEnvironmentVariables(rawKey, variables);
+        const valueResult = resolveEnvironmentVariables(rawValue, variables);
+        keyResult.missing.forEach((name) => missing.add(name));
+        valueResult.missing.forEach((name) => missing.add(name));
+        resolvedHeaders[keyResult.value] = valueResult.value;
+      }
+      if (missing.size > 0) throw new Error(`Variables no definidas: ${[...missing].join(', ')}`);
+      if (resolvedBody.value.trim() && jsonErrors > 0) {
+        try { JSON.parse(resolvedBody.value); } catch { throw new Error('El Body sigue siendo JSON inválido después de resolver variables'); }
+      }
+
       // Cliente nativo: envía y recibe cookies y evita CORS.
       const respuesta = await enviarRequest({
         eid,
         metodo: requestMetodo,
-        url,
-        headers: buildRequestHeaders(),
-        body: requestMetodo === 'GET' || !body.trim() ? null : body,
+        url: resolvedUrl.value,
+        headers: resolvedHeaders,
+        body: requestMetodo === 'GET' || !resolvedBody.value.trim() ? null : resolvedBody.value,
         enviarCookies,
       });
 
@@ -436,6 +477,18 @@ export const RubriApiView = () => {
         duration_ms: respuesta.duration_ms,
       });
       setCookiesRevision((valor) => valor + 1);
+
+      try {
+        const afterResult = await runRequestScript({
+          script: postResponseScript,
+          environment: useEnvironmentStore.getState().activeVariables(),
+          request: { url: resolvedUrl.value, headers: resolvedHeaders },
+          response: respuesta,
+        });
+        await useEnvironmentStore.getState().setVariablesFromScript(afterResult.changed);
+      } catch (scriptError) {
+        notify.error('Error en After response', errorMessage(scriptError));
+      }
     } catch (error) {
       const duration = Math.round(performance.now() - startedAt);
       patchResponse(requestKey, {
@@ -463,6 +516,8 @@ export const RubriApiView = () => {
   const handleLoadSaved = async (request: ApiRequestDocument) => {
     if (!(await confirmDiscard())) return;
     loadRequest(request);
+    openEnvironmentEditor(null);
+    setEnvironmentManagerOpen(false);
     setDraftTabOpen(false);
     setOverviewOpen(false);
     setActiveTab('body');
@@ -543,7 +598,12 @@ export const RubriApiView = () => {
   const handleCambiarProyecto = async (codigo: string) => {
     if (codigo === eid) return;
     if (!(await confirmDiscard())) return;
+    // La selección y el borrador del Environment anterior desaparecen antes
+    // de iniciar cualquier lectura del nuevo proyecto.
+    useEnvironmentStore.getState().reset();
     await cambiarProyecto(codigo);
+    openEnvironmentEditor(null);
+    setEnvironmentManagerOpen(false);
     setResponses({});
     setOpenTabs([]);
     setDraftTabOpen(false);
@@ -554,6 +614,8 @@ export const RubriApiView = () => {
   const handleNewRequest = async () => {
     if (!(await confirmDiscard())) return;
     newRequest();
+    openEnvironmentEditor(null);
+    setEnvironmentManagerOpen(false);
     setDraftTabOpen(true);
     setOverviewOpen(false);
     setActiveTab('body');
@@ -580,6 +642,8 @@ export const RubriApiView = () => {
       // La pestaña ya está cargada: solo hay que traerla de vuelta del Overview.
       setDraftTabOpen(false);
       setOverviewOpen(false);
+      openEnvironmentEditor(null);
+      setEnvironmentManagerOpen(false);
       setActiveTab('body');
       return;
     }
@@ -587,6 +651,8 @@ export const RubriApiView = () => {
     if (!request) return;
     if (!(await confirmDiscard())) return;
     loadRequest(request);
+    openEnvironmentEditor(null);
+    setEnvironmentManagerOpen(false);
     setDraftTabOpen(false);
     setOverviewOpen(false);
     setActiveTab('body');
@@ -663,6 +729,8 @@ export const RubriApiView = () => {
     hydrateCollections();
   }, [hydrateCollections, sesion?.usuario, eid]);
 
+  useEffect(() => { void syncEnvironments(eid); }, [eid, sesion?.usuario, syncEnvironments]);
+
   useEffect(() => {
     let active = true;
     void (async () => {
@@ -715,6 +783,7 @@ export const RubriApiView = () => {
     const syncNow = () => {
       if (!browserIsOnline() || document.visibilityState !== 'visible') return;
       void refreshFromMongo({ silent: true, background: true, sync: true });
+      void useEnvironmentStore.getState().sync(useApiStore.getState().eid, { silent: true });
     };
 
     const interval = window.setInterval(syncNow, SYNC_INTERVAL_MS);
@@ -826,6 +895,16 @@ export const RubriApiView = () => {
         : 'Entorno preparado';
   const initialProgress = initialStage === 'connecting' ? 14 : initialStage === 'projects' ? 46 : initialStage === 'workspace' ? 82 : 100;
   const updateVisible = updater.overlay && ['checking', 'downloading', 'installing'].includes(updater.status);
+  const editorEnvironment = environments.find((item) => item._id === editorEnvironmentId);
+  const openEnvironmentManager = () => {
+    const environmentId = editorEnvironmentId
+      ?? useEnvironmentStore.getState().activeEnvironmentId
+      ?? environments[0]?._id
+      ?? null;
+    openEnvironmentEditor(environmentId);
+    setEnvironmentManagerOpen(true);
+    setOverviewOpen(false);
+  };
   const updateStatus = updater.status === 'checking'
     ? 'Buscando actualizaciones...'
     : updater.status === 'downloading'
@@ -873,13 +952,17 @@ export const RubriApiView = () => {
         isRefreshing={isRefreshing}
         overviewOpen={overviewOpen}
         draftOpen={draftTabOpen}
-        onOpenOverview={() => setOverviewOpen(true)}
+        onOpenOverview={() => { openEnvironmentEditor(null); setEnvironmentManagerOpen(false); setOverviewOpen(true); }}
         onToggleSidebar={() => setSidebarCollapsed((value) => !value)}
         onActivateTab={(id) => void activateTab(id)}
         onCloseTab={(id) => void closeTab(id)}
         onCloseDraft={() => void closeDraft()}
         onNewRequest={() => void handleNewRequest()}
         onRefresh={handleRefresh}
+        environmentOpen={environmentManagerOpen}
+        environmentName="Environments"
+        onCloseEnvironment={() => { openEnvironmentEditor(null); setEnvironmentManagerOpen(false); setOverviewOpen(true); }}
+        onConfigureEnvironments={openEnvironmentManager}
       />
 
       <div className="rubri-layout">
@@ -921,7 +1004,9 @@ export const RubriApiView = () => {
           })}
           ref={mainRef}
         >
-          {overviewOpen ? (
+          {environmentManagerOpen ? (
+            <EnvironmentEditor environmentId={editorEnvironment?._id ?? null} />
+          ) : overviewOpen ? (
             <RubriWorkspaceOverview
               onNewRequest={() => void handleNewRequest()}
               onNewCollection={openCollectionModal}
@@ -970,6 +1055,7 @@ export const RubriApiView = () => {
                 )}
                 {activeTab === 'auth' && <RubriAuthPanel />}
                 {activeTab === 'headers' && <RubriHeadersPanel />}
+                {activeTab === 'scripts' && <RubriScriptsPanel />}
                 <RubriResponsePanel
                   response={response}
                   status={status}

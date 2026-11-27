@@ -27,6 +27,7 @@ const API_COLLECTION_NAME: &str = "api_requests";
 const PROYECTOS_COLLECTION: &str = "proyectos";
 /// Colección de cookies (definida en `http.rs`).
 const COOKIES_COLLECTION: &str = "cookies";
+const ENVIRONMENTS_COLLECTION: &str = "environments";
 /// Color por defecto de un proyecto nuevo (dorado Rubrifact).
 pub const DEFAULT_PROYECTO_COLOR: &str = "#C5A059";
 
@@ -487,8 +488,15 @@ pub async fn eliminar_proyecto(payload: DeleteProyectoPayload) -> Result<(), Str
             .map_err(|error| format!("No se pudieron borrar las cookies: {error}"))?
             .deleted_count;
 
+        let environments = datos
+            .collection::<mongodb::bson::Document>(ENVIRONMENTS_COLLECTION)
+            .delete_many(doc! { "eid": &proyecto.codigo })
+            .await
+            .map_err(|error| format!("No se pudieron borrar los entornos: {error}"))?
+            .deleted_count;
+
         log::info!(
-            "Proyecto {} eliminado con su contenido ({requests} documentos, {cookies} cookies)",
+            "Proyecto {} eliminado con su contenido ({requests} documentos, {cookies} cookies, {environments} entornos)",
             proyecto.codigo
         );
     } else {
@@ -522,6 +530,12 @@ async fn migrar_eid(origen: &str, destino: &str) -> Result<(), String> {
         .await
         .map_err(|error| format!("No se pudieron migrar las cookies: {error}"))?;
 
+    let environments = datos
+        .collection::<mongodb::bson::Document>(ENVIRONMENTS_COLLECTION)
+        .update_many(doc! { "eid": origen }, doc! { "$set": { "eid": destino } })
+        .await
+        .map_err(|error| format!("No se pudieron migrar los entornos: {error}"))?;
+
     datos
         .collection::<mongodb::bson::Document>("historial")
         .update_many(
@@ -535,11 +549,12 @@ async fn migrar_eid(origen: &str, destino: &str) -> Result<(), String> {
         .map_err(|error| format!("No se pudo migrar el historial del proyecto: {error}"))?;
 
     log::info!(
-        "EID migrado {} → {} ({} documentos, {} cookies)",
+        "EID migrado {} → {} ({} documentos, {} cookies, {} entornos)",
         origen,
         destino,
         requests.modified_count,
-        cookies.modified_count
+        cookies.modified_count,
+        environments.modified_count
     );
 
     Ok(())

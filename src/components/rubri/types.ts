@@ -1,6 +1,6 @@
 import type { ResponseLanguage } from '../common/ResponseViewer';
 
-export type TabId = 'params' | 'body' | 'auth' | 'headers';
+export type TabId = 'params' | 'body' | 'auth' | 'headers' | 'scripts';
 
 export type ModalMode = 'save' | 'rename' | 'collectionCreate' | 'collectionRename';
 

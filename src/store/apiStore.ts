@@ -84,6 +84,8 @@ export interface ApiRequestDocument {
   /** Descripciones de los query params, indexadas por nombre. */
   query_descripciones?: Record<string, string> | null;
   auth: AuthConfig | null;
+  pre_request_script: string;
+  post_response_script: string;
   http_info: HttpInfo;
   coleccion_id: string | null;
   orden: number;
@@ -117,6 +119,8 @@ export interface ApiRequestPayload {
   /** Descripciones de los query params, indexadas por nombre. */
   query_descripciones?: Record<string, string> | null;
   auth: AuthConfig | null;
+  pre_request_script: string;
+  post_response_script: string;
   http_info: HttpInfo;
   coleccion_id: string | null;
   version?: number;
@@ -418,6 +422,8 @@ export interface ApiState {
   /** Descripciones de los query params del draft, indexadas por nombre. */
   queryDescripciones: Record<string, string>;
   auth: AuthConfig;
+  preRequestScript: string;
+  postResponseScript: string;
   httpInfo: HttpInfo;
   version: number;
   /** Colección del draft actual. */
@@ -458,6 +464,8 @@ export interface ApiState {
   /** Guarda la descripción de un query param (clave = nombre del parámetro). */
   setQueryDescripcion: (clave: string, descripcion: string) => void;
   setAuth: (patch: Partial<AuthConfig>) => void;
+  setPreRequestScript: (script: string) => void;
+  setPostResponseScript: (script: string) => void;
   setHttpInfo: (info: HttpInfo) => void;
   setActiveCollection: (id: string | null) => void;
   setDraftCollection: (id: string | null) => void;
@@ -524,6 +532,8 @@ interface DraftSource {
   headerRows: HeaderRow[];
   queryDescripciones: Record<string, string>;
   auth: AuthConfig;
+  preRequestScript: string;
+  postResponseScript: string;
   httpInfo: HttpInfo;
   version: number;
   coleccionId: string | null;
@@ -549,6 +559,8 @@ const buildPayload = (state: DraftSource): ApiRequestPayload => ({
       ? state.queryDescripciones
       : null,
   auth: toPayloadAuth(state.auth),
+  pre_request_script: state.preRequestScript,
+  post_response_script: state.postResponseScript,
   http_info: state.httpInfo,
   coleccion_id: state.coleccionId,
   version: state.version,
@@ -589,6 +601,8 @@ export const useApiStore = create<ApiState>()((set, get) => {
     headerRows: DEFAULT_HEADERS,
     queryDescripciones: {},
     auth: defaultAuth(),
+    preRequestScript: '',
+    postResponseScript: '',
     httpInfo: { status_code: 0, duration_ms: 0 },
     version: 1,
     coleccionId: initialCollections[0]?._id ?? null,
@@ -669,6 +683,12 @@ export const useApiStore = create<ApiState>()((set, get) => {
       set((state) =>
         applyDraft(state, { auth: { ...state.auth, ...patch } }),
       ),
+
+    setPreRequestScript: (preRequestScript) =>
+      set((state) => applyDraft(state, { preRequestScript })),
+
+    setPostResponseScript: (postResponseScript) =>
+      set((state) => applyDraft(state, { postResponseScript })),
 
     // La información HTTP no ensucia el draft: se actualiza al enviar.
     setHttpInfo: (info) =>
@@ -756,6 +776,10 @@ export const useApiStore = create<ApiState>()((set, get) => {
           payload,
         });
         networkStatus().reportSuccess();
+
+        // El guardado pertenece al draft capturado. Si el usuario cambió de
+        // proyecto mientras MongoDB respondía, no se publica sobre el nuevo.
+        if (get().eid !== payload.eid) return savedId;
 
         const nextVersion = options.asNew ? 1 : state.version + 1;
         set((current) => {
@@ -848,9 +872,13 @@ export const useApiStore = create<ApiState>()((set, get) => {
       workspaceRefresh = { user, eid: state.eid, promise: pending };
 
       try {
-        const workspace = await invoke<ApiWorkspace>(options.readOnly ? 'get_api_workspace_snapshot' : 'get_api_workspace', {
+        const incomingWorkspace = await invoke<ApiWorkspace>(options.readOnly ? 'get_api_workspace_snapshot' : 'get_api_workspace', {
           filter: { eid: state.eid, limit: 500 },
         });
+        const workspace: ApiWorkspace = {
+          collections: incomingWorkspace.collections.filter((collection) => collection.eid === state.eid),
+          requests: incomingWorkspace.requests.filter((request) => request.eid === state.eid),
+        };
         networkStatus().reportSuccess();
         if (requestId !== syncSequence || get().eid !== state.eid || (useAuthStore.getState().sesion?.usuario ?? '') !== user) return get().savedRequests;
 
@@ -885,7 +913,7 @@ export const useApiStore = create<ApiState>()((set, get) => {
 
           if (options.sync && current.lastSavedId) {
             const remote = workspace.requests.find(
-              (request) => request._id === current.lastSavedId,
+              (request) => request._id === current.lastSavedId && request.eid === current.eid,
             );
 
             const recentlySaved = Date.now() - current.lastSaveAt < 10_000;
@@ -916,6 +944,8 @@ export const useApiStore = create<ApiState>()((set, get) => {
                 headerRows: recordToRows(remote.headers),
                 queryDescripciones: remote.query_descripciones ?? {},
                 auth: normalizeAuth(remote.auth),
+                preRequestScript: remote.pre_request_script ?? '',
+                postResponseScript: remote.post_response_script ?? '',
                 httpInfo: remote.http_info,
                 version: remote.version,
                 coleccionId: remote.coleccion_id ?? coleccionId,
@@ -958,6 +988,8 @@ export const useApiStore = create<ApiState>()((set, get) => {
                         headerRows: draft.headerRows,
                         queryDescripciones: draft.queryDescripciones,
                         auth: draft.auth,
+                        preRequestScript: draft.preRequestScript,
+                        postResponseScript: draft.postResponseScript,
                         httpInfo: draft.httpInfo,
                         revision: current.revision + 1,
                       }
@@ -1004,6 +1036,10 @@ export const useApiStore = create<ApiState>()((set, get) => {
     },
 
     loadRequest: (request) => {
+      if (request.eid !== get().eid) {
+        notify.warning('La request pertenece a otro proyecto');
+        return;
+      }
       const auth = normalizeAuth(request.auth);
       const headerRows = recordToRows(request.headers);
       const metodo = (request.metodo || 'GET').toUpperCase() as HttpMethod;
@@ -1018,6 +1054,8 @@ export const useApiStore = create<ApiState>()((set, get) => {
         headerRows,
         queryDescripciones: request.query_descripciones ?? {},
         auth,
+        preRequestScript: request.pre_request_script ?? '',
+        postResponseScript: request.post_response_script ?? '',
         httpInfo: request.http_info,
         version: request.version,
         coleccionId: request.coleccion_id,
@@ -1049,6 +1087,8 @@ export const useApiStore = create<ApiState>()((set, get) => {
         headerRows: DEFAULT_HEADERS.map((row) => ({ ...row })),
         queryDescripciones: {},
         auth: defaultAuth(),
+        preRequestScript: '',
+        postResponseScript: '',
         httpInfo: { status_code: 0, duration_ms: 0 },
         version: 1,
         coleccionId,
@@ -1154,6 +1194,8 @@ export const useApiStore = create<ApiState>()((set, get) => {
         body: source.body,
         headers: source.headers,
         auth: source.auth,
+        pre_request_script: source.pre_request_script ?? '',
+        post_response_script: source.post_response_script ?? '',
         http_info: source.http_info,
         coleccion_id: source.coleccion_id,
         version: source.version,
@@ -1784,6 +1826,8 @@ export const useApiStore = create<ApiState>()((set, get) => {
         lastSyncAt: null,
         lastError: null,
         lastSavedId: null,
+        isSaving: false,
+        isImporting: false,
       });
       get().newRequest({ coleccionId: firstId });
       await get().refreshFromMongo({ silent: true });
@@ -1809,6 +1853,8 @@ export const useApiStore = create<ApiState>()((set, get) => {
         headerRows: DEFAULT_HEADERS.map((row) => ({ ...row })),
         queryDescripciones: {},
         auth: defaultAuth(),
+        preRequestScript: '',
+        postResponseScript: '',
         httpInfo: { status_code: 0, duration_ms: 0 },
         version: 1,
         coleccionId: null,
